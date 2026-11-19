@@ -60,7 +60,7 @@ export default function documentRoutes(router, { config }) {
     await ctx.audit('document_uploaded', 'document', row.id, { category, deal_id: dealId, size: buf.length, mime });
     ctx.status = 201;
     return row;
-  }, { bodyLimit: 12 * 1024 * 1024 });
+  }, { bodyLimit: Math.ceil(config.maxUploadBytes * 1.4) + 4096 });
 
   router.add('GET', '/api/documents', async (ctx) => {
     const org = requireOrg(ctx);

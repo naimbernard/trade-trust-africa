@@ -183,11 +183,12 @@ async function documentsTab(d) {
   </div>
   ${!d.readOnly && canAct() && d.deal.status !== 'cancelled' ? `<form class="card form" data-form="upload" data-deal="${d.deal.id}"><h2>Upload document</h2>
     <div><label>Type</label><select name="category">${options(S.meta.documentCategories.map((c) => [c, cap(c)]), 'proforma_invoice')}</select></div>
-    <div><label>File (PDF, PNG or JPEG, max 8 MB)</label><input type="file" name="file" accept="application/pdf,image/png,image/jpeg" required></div>
+    <div><label>File (PDF, PNG or JPEG, max ${Math.round(S.meta.flags.maxUploadBytes / 1048576)} MB)</label><input type="file" name="file" accept="application/pdf,image/png,image/jpeg" required></div>
     <button class="btn">Upload</button></form>` : ''}</div>`;
 }
 export async function readFileB64(file) {
-  if (file.size > 8 * 1024 * 1024) throw new Error('Files must be 8 MB or smaller');
+  const max = S.meta.flags.maxUploadBytes;
+  if (file.size > max) throw new Error(`Files must be ${Math.round(max / 1048576)} MB or smaller`);
   const buf = new Uint8Array(await file.arrayBuffer());
   let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
   return btoa(bin);

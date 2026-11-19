@@ -20,7 +20,8 @@ export default function publicRoutes(router, { pool, config }) {
     flags: {
       pilotFreeAccess: config.pilotFreeAccess, pilotWaiveFees: config.pilotWaiveFees,
       verificationProviderLive: config.verificationProviderLive, billingProvider: config.billingProvider,
-      paymentsLive: false, // There is no regulated payment integration. Payment stages record terms only.
+      paymentsLive: false,
+      maxUploadBytes: config.maxUploadBytes, // There is no regulated payment integration. Payment stages record terms only.
     },
   }));
 

@@ -5,8 +5,8 @@ pg.types.setTypeParser(1700, (v) => (v === null ? null : Number(v)));
 // Keep DATE as plain YYYY-MM-DD strings, avoiding timezone shifts.
 pg.types.setTypeParser(1082, (v) => v);
 
-export function createPool(databaseUrl) {
-  return new pg.Pool({ connectionString: databaseUrl, max: 10, idleTimeoutMillis: 30000 });
+export function createPool(databaseUrl, { max = 10 } = {}) {
+  return new pg.Pool({ connectionString: databaseUrl, max, idleTimeoutMillis: 10000, connectionTimeoutMillis: 10000 });
 }
 
 /** Run fn inside a transaction. fn receives a client with .query. Rolls back on any error. */

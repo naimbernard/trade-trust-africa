@@ -70,7 +70,7 @@ async function docsTab() {
       ${isManager() ? `<button class="btn sm ghost" data-action="doc-delete" data-id="${x.id}">Delete</button>` : ''}</div>`).join('') : empty('No company documents yet')}</div>
     <form class="card form" data-form="upload"><h2>Upload</h2>
       <div><label>Type</label><select name="category">${options(S.meta.documentCategories.map((c) => [c, cap(c)]), 'certificate_of_incorporation')}</select></div>
-      <div><label>File (PDF, PNG or JPEG, max 8 MB)</label><input type="file" name="file" accept="application/pdf,image/png,image/jpeg" required></div>
+      <div><label>File (PDF, PNG or JPEG, max ${Math.round(S.meta.flags.maxUploadBytes / 1048576)} MB)</label><input type="file" name="file" accept="application/pdf,image/png,image/jpeg" required></div>
       <button class="btn">Upload</button></form></div>`;
 }
 actions['doc-delete'] = async (el) => { await post(`/api/documents/${el.dataset.id}/delete`); toast('Document deleted'); rerender(); };

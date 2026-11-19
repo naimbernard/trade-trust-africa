@@ -36,12 +36,29 @@ Create a real platform admin: `TTA_ADMIN_PASSWORD='...' npm run create-admin -- 
 
 Other commands:
 
-* `npm test` runs 44 integration tests against the `tta_test` database (wiped each run).
+* `npm test` runs 46 integration tests against the `tta_test` database (wiped each run).
 * `npm run db:reset` drops and recreates the development schema (refuses in production).
 * `npm run dev` restarts on file changes.
 * `node scripts/e2e-smoke.cjs` drives a browser through every role on desktop and mobile (needs Playwright and a running, freshly seeded server; screenshots go to `e2e-shots/`).
 
 Environment variables are documented in `.env.example`. In production set `NODE_ENV=production`, `DATABASE_URL`, `SECURE_COOKIES=true` and `TRUST_PROXY=true` behind an HTTPS proxy.
+
+## Deploy to Vercel
+
+The repo is ready for Vercel: `public/` is served from the CDN, and every `/api/*` request runs in one serverless function (`api/index.mjs`). The build step (`scripts/vercel-build.mjs`) applies database migrations.
+
+1. **Import:** on vercel.com choose **Add New → Project**, import `naimbernard/trade-trust-africa`, and keep the defaults (`vercel.json` sets everything).
+2. **Database:** in the project open **Storage → Create Database → Neon (Postgres)** and connect it to all environments. This sets `POSTGRES_URL` automatically. Use the **pooled** connection string.
+3. **First admin:** under **Settings → Environment Variables** add `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` (10+ characters, letters and numbers).
+4. **Deploy:** redeploy so the build runs migrations and creates the admin. Then **delete** `BOOTSTRAP_ADMIN_PASSWORD` from the settings.
+5. **Optional demo data:** set `SEED_DEMO=true` and a private `DEMO_PASSWORD`, redeploy once, then remove `SEED_DEMO`. The build refuses the public default password, because it would expose the demo admin account.
+
+Vercel specifics, applied automatically when the `VERCEL` variable is present:
+
+* File uploads are capped at 3 MB, because Vercel limits request bodies to 4.5 MB.
+* The database pool is limited to 3 connections per function instance.
+* Proxy headers are trusted, and cookies use the `__Host-` prefix with `Secure`.
+* Login rate limiting is per function instance. Add Vercel Firewall rate limiting rules for `/api/auth/*` before public launch.
 
 ## Status
 

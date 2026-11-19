@@ -4,7 +4,7 @@ import { migrate } from './src/migrate.mjs';
 import { createApp } from './src/app.mjs';
 
 const config = loadConfig();
-const pool = createPool(config.databaseUrl);
+const pool = createPool(config.databaseUrl, { max: config.dbPoolMax });
 
 if (config.autoMigrate) await migrate(pool, (m) => console.log(m));
 

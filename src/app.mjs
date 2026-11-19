@@ -19,7 +19,8 @@ import publicRoutes from './routes/public.mjs';
 
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
-export function createApp({ pool, config, logger = console }) {
+/** Request handler (req, res). Used directly by serverless platforms such as Vercel. */
+export function createHandler({ pool, config, logger = console }) {
   const router = new Router();
   const limiter = new RateLimiter();
   const deps = { pool, config };
@@ -67,7 +68,7 @@ export function createApp({ pool, config, logger = console }) {
     send(res, ctx.status || 200, result ?? { ok: true }, ctx.headers);
   }
 
-  const server = http.createServer(async (req, res) => {
+  return async (req, res) => {
     const started = Date.now();
     const ip = config.trustProxy ? String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress : req.socket.remoteAddress;
     let url;
@@ -88,6 +89,10 @@ export function createApp({ pool, config, logger = console }) {
         logger.log?.(JSON.stringify({ t: new Date().toISOString(), m: req.method, p: url.pathname, s: res.statusCode, ms: Date.now() - started }));
       }
     }
-  });
-  return server;
+  };
+}
+
+/** Long-running Node HTTP server (local development, Docker, VMs). */
+export function createApp(opts) {
+  return http.createServer(createHandler(opts));
 }
