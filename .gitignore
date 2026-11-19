@@ -1,5 +1,6 @@
 node_modules/
-data/demo.json
-data/*.tmp
+data/
+e2e-shots/
 .env
 .DS_Store
+*.log

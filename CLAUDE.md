@@ -6,7 +6,15 @@ You are the senior software architect and implementation agent for **Trade Trust
 Build a worldwide verified B2B commerce network linking manufacturers, exporters, importers, buyers, logistics providers, trade financiers and verification partners. Africa is the initial strategic focus, with Ghana-based distribution and long-term local processing/manufacturing ambitions. The user reports a commercial agreement with a large international surimi / crab sticks manufacturer, but the manufacturer identity, terms and approval to publish are not supplied. **Never fabricate their name or claim the partnership is verified by this system.**
 
 ## Existing code
-Start by reading `README.md` and inspecting `server.mjs` and `public/app.js`. Run `npm start` and verify all current working features before changing anything. Work on this repository, not Replit. Preserve design and existing flows unless changes are requested.
+Start by reading `README.md` (its Status section lists what is complete, simulated and outstanding). The app is a Node.js + PostgreSQL pilot: `src/app.mjs` is the request pipeline, `src/routes/` the API, `src/domain/` the business rules, `migrations/` the schema, `public/` a no build SPA. Run `npm test` (needs the `tta_test` database) before and after every change, and `node scripts/e2e-smoke.cjs` against a freshly seeded server for UI changes. Work on this repository, not Replit. Preserve design and existing flows unless changes are requested.
+
+## Engineering conventions
+* Schema changes go in a new numbered file in `migrations/`; never edit an applied migration.
+* Every mutating route: authenticate with `requireOrg`/`requirePlatform`, validate with `v.*`, scope queries by the caller's organisation, run multi step writes in `tx()`, and call `ctx.audit(...)`.
+* Deal access goes through `loadDealFor` (non parties get 404). Stage changes lock the deal row (`lock: true`) and check `revision`.
+* Strict CSP: no inline scripts or `style=` attributes in the UI; use classes or `data-style`.
+* Providers (logistics, finance) receive only explicitly whitelisted fields; add tests whenever that surface changes.
+* Payment, verification and email integrations sit behind the boundaries in `src/billing/provider.mjs`, `src/domain/rating.mjs` (`verificationLabel`) and config flags; never bypass them.
 
 ## Prioritized roadmap
 

@@ -1,0 +1,20 @@
+# Local development stack. Not a production deployment.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: tta
+      POSTGRES_PASSWORD: tta_dev_password
+      POSTGRES_DB: tta
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+  app:
+    build: .
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://tta:tta_dev_password@db:5432/tta
+      AUTO_MIGRATE: "true"
+    ports: ["3000:3000"]
+    depends_on: [db]
+volumes:
+  pgdata:
