@@ -36,7 +36,7 @@ Create a real platform admin: `TTA_ADMIN_PASSWORD='...' npm run create-admin -- 
 
 Other commands:
 
-* `npm test` runs 60 integration tests against the `tta_test` database (wiped each run).
+* `npm test` runs 65 integration tests against the `tta_test` database (wiped each run).
 * `npm run db:reset` drops and recreates the development schema (refuses in production).
 * `npm run dev` restarts on file changes.
 * `node scripts/e2e-smoke.cjs` drives a browser through every role on desktop and mobile (needs Playwright and a running, freshly seeded server; screenshots go to `e2e-shots/`).
@@ -74,6 +74,8 @@ The live Vercel site runs as a private presentation demo by Mavorra Creative:
 * Every company shows a 100 Trade-Ready score with all checks passed, labelled "Verified (demo data)". A banner on every page says all data is for demonstration only.
 * Pitch profiles are loaded on each deploy (`scripts/seed-pitch.mjs`): Bernard Builders & Real Estate, Goevia Builders, Gadre Marine and the fictional Coastline Wholesale Fish (DEMO), plus two fictional partner banks that reply instantly to finance requests. Logins: `bernard@pitch.tta`, `goevia@pitch.tta`, `gadre@pitch.tta`, `wholesalefish@pitch.tta`, `bank1@pitch.tta` and `bank2@pitch.tta`, using `PITCH_PASSWORD` or else the admin bootstrap password.
 * Businesses in AfCFTA member states get an AfCFTA badge, and a note that trade with other African member states may qualify for reduced or zero tariffs, subject to rules of origin.
+
+The build also loads a one-time **showcase** (`scripts/seed-showcase.mjs`, demo mode only): fictional suppliers Tema Cement & Concrete, Konkan Steel & TMT and Atlantic Cold Chain Logistics (`cement@`, `steel@`, `freight@pitch.tta`), indicative prices on every listing, a demo certificate and checks for every company, and four Trade Rooms: a completed crab sticks trade (finance, freight quote, tracking, payment on time), a cement trade shipped and awaiting Bernard's delivery confirmation, a TMT offer awaiting Goevia, and a new prawns chat for Gadre.
 
 To switch to the real pilot (real scores and an open site), set `DEMO_MODE=false` and redeploy. Set `SITE_GATE=off` to keep demo scores without the password.
 

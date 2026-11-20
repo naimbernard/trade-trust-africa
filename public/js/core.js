@@ -34,7 +34,10 @@ export const pill = (s, text) => `<span class="pill ${esc(s)}">${esc(text ?? cap
 export const demo = (flag) => (flag ? '<span class="pill demo" title="Fictional demonstration data">DEMO</span>' : '');
 export const orgTypeLabel = (t) => S.meta?.orgTypes?.[t]?.label || cap(t);
 export const payLabel = (code) => S.meta?.paymentMethods?.find((p) => p.code === code)?.label || label(code);
-export const priceRange = (l) => (l.price_min == null && l.price_max == null ? 'Price on request'
+const singular = (u) => (/(x|ch|sh)es$/.test(u) ? u.slice(0, -2) : /[^s]s$/.test(u) ? u.slice(0, -1) : u);
+const perUnit = (u) => (u ? ` per ${singular(String(u))}` : '');
+export const priceRange = (l) => priceRangeBase(l) + (l.price_min != null || l.price_max != null ? perUnit(l.unit) : '');
+const priceRangeBase = (l) => (l.price_min == null && l.price_max == null ? 'Price on request'
   : l.price_min != null && l.price_max != null && l.price_min !== l.price_max ? `${money(l.price_min, l.currency)} to ${money(l.price_max, l.currency)}`
     : money(l.price_min ?? l.price_max, l.currency));
 

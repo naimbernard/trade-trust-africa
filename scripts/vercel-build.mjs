@@ -6,6 +6,8 @@ import { createPool } from '../src/db.mjs';
 import { migrate } from '../src/migrate.mjs';
 import { hashPassword, passwordProblem } from '../src/security.mjs';
 import { seedPitch } from './seed-pitch.mjs';
+import { seedShowcase } from './seed-showcase.mjs';
+import { loadConfig } from '../src/config.mjs';
 
 const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 if (!url) {
@@ -37,6 +39,11 @@ const pitchPassword = process.env.PITCH_PASSWORD || password;
 if (process.env.SEED_PITCH !== 'false' && pitchPassword) {
   const n = await seedPitch(pool, pitchPassword);
   console.log(n ? `${n} pitch profile(s) created` : 'Pitch profiles already present');
+  // Demo showcase (example Trade Rooms, documents, indicative prices). Only while the site is a demo.
+  if (process.env.DEMO_MODE !== 'false') {
+    const config = { ...loadConfig({ ...process.env, NODE_ENV: 'production', DATABASE_URL: url }), demoMode: true };
+    await seedShowcase({ pool, config, password: pitchPassword });
+  }
 }
 await pool.end();
 

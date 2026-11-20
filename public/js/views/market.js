@@ -57,11 +57,14 @@ export async function listing({ id }) {
     ${l.description ? `<p data-style="white-space:pre-wrap">${esc(l.description)}</p>` : ''}
     <div class="row">
       ${l.mine ? `<a class="btn" href="#/listings/${l.id}/edit">Edit listing</a>` : ''}
-      ${iCanTrade ? `<button class="btn gold" data-action="open-deal" data-id="${l.id}">${l.kind === 'offer' ? 'Start a Trade Room' : 'Respond with a Trade Room'}</button>
+      ${iCanTrade ? `<button class="btn gold lg" data-action="open-deal" data-id="${l.id}">${l.kind === 'offer' ? 'Buy or negotiate' : 'Respond with an offer'}</button>
         <button class="btn ghost" data-action="enquire" data-id="${l.id}">Send enquiry</button>` : ''}
       ${!S.me.user ? '<a class="btn gold" href="#/login">Sign in to trade</a>' : ''}
     </div>
-    ${S.me.org && !l.mine && !iCanTrade ? `<p class="small muted">Your organisation type (${esc(orgTypeLabel(S.me.org.type))}) cannot open a Trade Room on this listing.</p>` : ''}
+    ${S.me.org && !l.mine && !iCanTrade ? `<div class="notice warn">${l.kind === 'request'
+    ? `This is a <strong>buy request</strong>: ${esc(l.org_name)} wants to buy. Only selling companies (manufacturers, exporters, distributors) can respond with an offer. You are signed in as ${esc(S.me.org.name)}, a ${esc(orgTypeLabel(S.me.org.type).toLowerCase())}.${S.meta.flags.demoMode ? ' In this demo, sign in as cement@pitch.tta or steel@pitch.tta to respond as a supplier.' : ''}`
+    : `This is a <strong>supply offer</strong>. Only buying companies (importers, buyers, distributors) can buy. You are signed in as ${esc(S.me.org.name)}.${S.meta.flags.demoMode ? ' In this demo, sign in as wholesalefish@pitch.tta, bernard@pitch.tta or goevia@pitch.tta to buy.' : ''}`}</div>` : ''}
+    ${l.mine ? '<div class="notice">This is your own listing. Buyers and sellers who respond appear in Messages.</div>' : ''}
   </div>
   <div class="card stack"><h2>${l.kind === 'offer' ? 'Supplier' : 'Buyer'}</h2>
     <div class="row"><a class="strong" href="#/org/${l.org_id}">${esc(l.org_name)}</a>${demo(l.org_demo)}</div>

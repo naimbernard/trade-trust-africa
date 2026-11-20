@@ -63,6 +63,29 @@ export const PITCH = [
     ],
   },
   {
+    email: 'cement@pitch.tta', fullName: 'Tema Cement & Concrete (DEMO)', incorporated: '2011-02-14', history: 12,
+    org: { name: 'Tema Cement & Concrete Ltd (DEMO)', org_type: 'manufacturer', country: 'GH', city: 'Tema', demo: true, pitch: false, registration_number: 'DEMO-GH-CS-0211',
+      description: 'Fictional cement grinding and ready mix concrete producer in Tema, Ghana, created for demonstration. Supplies developers across Greater Accra and exports within West Africa.', sectors: ['Building materials', 'Cement', 'Ready mix concrete'] },
+    listings: [
+      { kind: 'offer', title: 'Portland cement CEM II 42.5N, 50kg bags', category: 'Building materials', hs_code: '252329', origin_country: 'GH', quantity: 5000, unit: 'tonnes', price_min: 92, price_max: 105, lead_time_days: 7, incoterms: ['EXW', 'FCA', 'DAP'], description: 'Fictional demo listing. CEM II 42.5N Portland cement in 50kg bags, palletised. Minimum order 100 tonnes. Indicative price per tonne.' },
+      { kind: 'offer', title: 'Ready mix concrete C30/37 delivered to site', category: 'Building materials', hs_code: '382450', origin_country: 'GH', quantity: 20000, unit: 'cubic metres', price_min: 78, price_max: 95, lead_time_days: 2, incoterms: ['DAP'], description: 'Fictional demo listing. C30/37 ready mix concrete delivered by truck mixer within Greater Accra. Indicative price per cubic metre.' },
+    ],
+  },
+  {
+    email: 'steel@pitch.tta', fullName: 'Konkan Steel & TMT (DEMO)', incorporated: '2008-08-20', history: 12,
+    org: { name: 'Konkan Steel & TMT (DEMO)', org_type: 'manufacturer', country: 'IN', city: 'Verna, Goa', demo: true, pitch: false, registration_number: 'DEMO-IN-U27100GA2008',
+      description: 'Fictional TMT rebar rolling mill in Goa, India, created for demonstration. Supplies builders in Goa and exports to West Africa.', sectors: ['Metals & minerals', 'TMT steel'] },
+    listings: [
+      { kind: 'offer', title: 'TMT steel bars Fe 500D, 8mm to 32mm', category: 'Metals & minerals', hs_code: '721420', origin_country: 'IN', quantity: 3000, unit: 'tonnes', price_min: 610, price_max: 680, lead_time_days: 21, incoterms: ['EXW', 'FOB', 'CFR', 'CIF'], description: 'Fictional demo listing. Fe 500D TMT reinforcement bars with mill test certificates, 12m lengths. Indicative price per tonne.' },
+    ],
+  },
+  {
+    email: 'freight@pitch.tta', fullName: 'Atlantic Cold Chain Logistics (DEMO)', incorporated: '2013-04-02',
+    org: { name: 'Atlantic Cold Chain Logistics (DEMO)', org_type: 'logistics', country: 'GH', city: 'Tema', demo: true, pitch: false,
+      description: 'Fictional freight forwarder and reefer specialist for demonstration: sea freight, customs clearance and cold storage at Tema.', sectors: ['Freight forwarding', 'Cold chain'] },
+    listings: [],
+  },
+  {
     email: 'bank1@pitch.tta', fullName: 'Atlantic Trade Bank (DEMO)', incorporated: '2004-05-12',
     org: { name: 'Atlantic Trade Bank (DEMO)', org_type: 'finance', country: 'GH', city: 'Accra', demo: true, pitch: false,
       description: 'Fictional partner bank for demonstration: Letters of Credit, LC confirmation and import finance.', sectors: ['Trade finance'] },
@@ -86,15 +109,15 @@ export async function seedPitch(pool, password, log = console.log) {
       if ((await c.query('select 1 from users where email=$1', [p.email])).rowCount) return;
       const u = (await c.query('insert into users (email, full_name, password_hash, is_demo) values ($1,$2,$3,$4) returning id', [p.email, p.fullName, hash, !!p.org.demo])).rows[0];
       const o = p.org;
-      const org = (await c.query(`insert into organisations (name, org_type, country, city, website, description, sectors, pitch_preview, pitch_notice, is_demo)
-                                  values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
-      [o.name, o.org_type, o.country, o.city, o.website || null, o.description, o.sectors, o.pitch, o.pitch ? notice(o.name) : null, !!o.demo])).rows[0];
+      const org = (await c.query(`insert into organisations (name, org_type, country, city, website, description, sectors, pitch_preview, pitch_notice, is_demo, registration_number)
+                                  values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
+      [o.name, o.org_type, o.country, o.city, o.website || null, o.description, o.sectors, o.pitch, o.pitch ? notice(o.name) : null, !!o.demo, o.registration_number || null])).rows[0];
       await c.query(`insert into memberships (user_id, org_id, role) values ($1,$2,'owner')`, [u.id, org.id]);
       await c.query(`insert into subscriptions (org_id, plan_code) values ($1,'explorer')`, [org.id]);
       for (const l of p.listings) {
-        await c.query(`insert into listings (org_id, created_by, kind, title, description, category, hs_code, origin_country, destination_country, currency, incoterms, is_demo)
-                       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'USD',$10,$11)`,
-        [org.id, u.id, l.kind, l.title, l.description, l.category, l.hs_code || null, l.origin_country || null, l.destination_country || null, l.incoterms || [], !!o.demo]);
+        await c.query(`insert into listings (org_id, created_by, kind, title, description, category, hs_code, origin_country, destination_country, currency, incoterms, is_demo, quantity, unit, price_min, price_max, lead_time_days)
+                       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'USD',$10,$11,$12,$13,$14,$15,$16)`,
+        [org.id, u.id, l.kind, l.title, l.description, l.category, l.hs_code || null, l.origin_country || null, l.destination_country || null, l.incoterms || [], !!o.demo, l.quantity ?? null, l.unit ?? null, l.price_min ?? null, l.price_max ?? null, l.lead_time_days ?? null]);
       }
       await c.query(`insert into audit_log (actor_user_id, actor_org_id, action, entity_type, entity_id, data) values ($1,$2,'pitch_profile_seeded','organisation',$3,$4)`,
         [u.id, org.id, String(org.id), { pitch_preview: o.pitch, listings: p.listings.length }]);
