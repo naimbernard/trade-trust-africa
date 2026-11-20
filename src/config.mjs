@@ -31,6 +31,12 @@ export function loadConfig(env = process.env) {
     // Vercel rejects request bodies over 4.5 MB; base64 adds a third, so files are capped at 3 MB there.
     maxUploadBytes: Number(env.MAX_UPLOAD_BYTES || (vercel ? 3 : 8) * 1024 * 1024),
     allowDemoSeed: bool(env.ALLOW_DEMO_SEED, !production),
+    // Presentation demo: every company shows a full demo score and the site sits behind a shared password gate.
+    // On by default for Vercel deployments; DEMO_MODE=false turns both off, SITE_GATE=off removes only the gate.
+    demoMode: bool(env.DEMO_MODE, vercel),
+    siteGate: bool(env.DEMO_MODE, vercel) && env.SITE_GATE !== 'off',
+    gatePassword: env.SITE_GATE_PASSWORD || '123',
+    demoBrand: env.DEMO_BRAND || 'Mavorra Creative',
     rateLimit: { authPerMinute: Number(env.RATE_AUTH_PER_MIN || 10), apiPerMinute: Number(env.RATE_API_PER_MIN || 600) },
   };
 }

@@ -2,7 +2,7 @@ import { v } from '../http.mjs';
 import { many } from '../db.mjs';
 import {
   ORG_TYPES, PAYMENT_METHODS, INCOTERMS, CURRENCIES, STAGES, VERIFICATION_CHECKS, DOCUMENT_CATEGORIES,
-  FINANCE_PRODUCTS, FINANCE_SHAREABLE, SHIPMENT_STATUSES, FEE_RULES, COUNTRIES, LISTING_CATEGORIES, TRANSPORT_MODES,
+  FINANCE_PRODUCTS, FINANCE_SHAREABLE, SHIPMENT_STATUSES, FEE_RULES, COUNTRIES, LISTING_CATEGORIES, TRANSPORT_MODES, AFCFTA,
 } from '../domain/constants.mjs';
 
 export default function publicRoutes(router, { pool, config }) {
@@ -15,13 +15,14 @@ export default function publicRoutes(router, { pool, config }) {
     orgTypes: ORG_TYPES, paymentMethods: PAYMENT_METHODS, incoterms: INCOTERMS, currencies: CURRENCIES, stages: STAGES,
     verificationChecks: VERIFICATION_CHECKS, documentCategories: DOCUMENT_CATEGORIES, financeProducts: FINANCE_PRODUCTS,
     financeShareable: FINANCE_SHAREABLE, shipmentStatuses: SHIPMENT_STATUSES, transportModes: TRANSPORT_MODES,
-    feeRules: FEE_RULES, countries: COUNTRIES, listingCategories: LISTING_CATEGORIES,
+    feeRules: FEE_RULES, countries: COUNTRIES, listingCategories: LISTING_CATEGORIES, afcfta: [...AFCFTA],
     plans: await many(pool, 'select code, name, price_usd_month, description, entitlements from plans order by sort'),
     flags: {
       pilotFreeAccess: config.pilotFreeAccess, pilotWaiveFees: config.pilotWaiveFees,
       verificationProviderLive: config.verificationProviderLive, billingProvider: config.billingProvider,
       paymentsLive: false,
-      maxUploadBytes: config.maxUploadBytes, // There is no regulated payment integration. Payment stages record terms only.
+      maxUploadBytes: config.maxUploadBytes,
+      demoMode: config.demoMode, demoBrand: config.demoBrand, // There is no regulated payment integration. Payment stages record terms only.
     },
   }));
 

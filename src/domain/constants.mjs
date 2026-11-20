@@ -113,3 +113,7 @@ export const LISTING_CATEGORIES = [
   'Cosmetics ingredients', 'Textiles & apparel', 'Building materials', 'Metals & minerals', 'Chemicals', 'Plastics & packaging',
   'Machinery & equipment', 'Automotive parts', 'Electronics', 'Energy & solar', 'Pharmaceuticals & medical', 'Furniture & wood', 'Other',
 ];
+
+// African Continental Free Trade Area: African Union members that signed the agreement (Eritrea has not; territories excluded).
+// Preferential tariffs still depend on ratification, each country's tariff schedule and AfCFTA rules of origin.
+export const AFCFTA = new Set([...AFRICA].filter((c) => !['ER', 'EH', 'RE', 'YT', 'SH'].includes(c)));

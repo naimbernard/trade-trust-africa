@@ -1,4 +1,4 @@
-// Loads the pitch scenario: Bernard Builders & Real Estate (Ghana) and Goevia Builders (Siolim, Goa) buying
+// Loads the pitch scenario: Coastline Wholesale Fish (fictional), Bernard Builders & Real Estate (Ghana) and Goevia Builders (Siolim, Goa) buying
 // concrete and steel, and Gadre Marine (India) supplying surimi and frozen seafood.
 // Idempotent: existing accounts are left untouched. Runs from the Vercel build unless SEED_PITCH=false.
 // Gadre Marine and Goevia Builders are ILLUSTRATIVE pitch profiles: hidden from signed-out visitors and labelled
@@ -50,6 +50,18 @@ export const PITCH = [
       { kind: 'offer', title: 'Ready to eat seafood dishes', category: 'Processed food', hs_code: '1604', origin_country: 'IN', incoterms: ['FOB', 'CFR', 'CIF'], description: 'Frozen ready to eat seafood dishes. Range, specifications and pricing on request.' },
     ],
   },
+  {
+    email: 'wholesalefish@pitch.tta', fullName: 'Coastline Wholesale Fish (DEMO)',
+    org: {
+      name: 'Coastline Wholesale Fish Ltd (DEMO)', org_type: 'importer', country: 'GH', city: 'Tema', demo: true,
+      description: 'Fictional Ghanaian wholesale fish and frozen seafood distributor supplying markets, supermarkets and hotels in Accra and Tema. Created for demonstration only.',
+      sectors: ['Frozen seafood', 'Wholesale'], pitch: false,
+    },
+    listings: [
+      { kind: 'request', title: 'Buying frozen crab sticks and surimi products for Ghana wholesale', category: 'Frozen seafood', hs_code: '160420', destination_country: 'GH', incoterms: ['CIF', 'CFR'], description: 'Monthly supply of frozen crab sticks, fish balls and other surimi products delivered to Tema port. Cold chain at minus 18C required. Volumes and pricing to be agreed.' },
+      { kind: 'request', title: 'Buying frozen prawns for wholesale distribution in Ghana', category: 'Frozen seafood', hs_code: '030617', destination_country: 'GH', incoterms: ['CIF'], description: 'Frozen prawns in mixed sizes for wholesale customers in Accra and Tema. Health certificates required. Volumes and pricing to be agreed.' },
+    ],
+  },
 ];
 
 export async function seedPitch(pool, password, log = console.log) {
@@ -60,17 +72,17 @@ export async function seedPitch(pool, password, log = console.log) {
   for (const p of PITCH) {
     await tx(pool, async (c) => {
       if ((await c.query('select 1 from users where email=$1', [p.email])).rowCount) return;
-      const u = (await c.query('insert into users (email, full_name, password_hash) values ($1,$2,$3) returning id', [p.email, p.fullName, hash])).rows[0];
+      const u = (await c.query('insert into users (email, full_name, password_hash, is_demo) values ($1,$2,$3,$4) returning id', [p.email, p.fullName, hash, !!p.org.demo])).rows[0];
       const o = p.org;
-      const org = (await c.query(`insert into organisations (name, org_type, country, city, website, description, sectors, pitch_preview, pitch_notice)
-                                  values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
-      [o.name, o.org_type, o.country, o.city, o.website || null, o.description, o.sectors, o.pitch, o.pitch ? notice(o.name) : null])).rows[0];
+      const org = (await c.query(`insert into organisations (name, org_type, country, city, website, description, sectors, pitch_preview, pitch_notice, is_demo)
+                                  values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
+      [o.name, o.org_type, o.country, o.city, o.website || null, o.description, o.sectors, o.pitch, o.pitch ? notice(o.name) : null, !!o.demo])).rows[0];
       await c.query(`insert into memberships (user_id, org_id, role) values ($1,$2,'owner')`, [u.id, org.id]);
       await c.query(`insert into subscriptions (org_id, plan_code) values ($1,'explorer')`, [org.id]);
       for (const l of p.listings) {
-        await c.query(`insert into listings (org_id, created_by, kind, title, description, category, hs_code, origin_country, destination_country, currency, incoterms)
-                       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'USD',$10)`,
-        [org.id, u.id, l.kind, l.title, l.description, l.category, l.hs_code || null, l.origin_country || null, l.destination_country || null, l.incoterms || []]);
+        await c.query(`insert into listings (org_id, created_by, kind, title, description, category, hs_code, origin_country, destination_country, currency, incoterms, is_demo)
+                       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'USD',$10,$11)`,
+        [org.id, u.id, l.kind, l.title, l.description, l.category, l.hs_code || null, l.origin_country || null, l.destination_country || null, l.incoterms || [], !!o.demo]);
       }
       await c.query(`insert into audit_log (actor_user_id, actor_org_id, action, entity_type, entity_id, data) values ($1,$2,'pitch_profile_seeded','organisation',$3,$4)`,
         [u.id, org.id, String(org.id), { pitch_preview: o.pitch, listings: p.listings.length }]);

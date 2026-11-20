@@ -8,13 +8,13 @@ import { ApiClient } from '../src/client.mjs';
 let env; let server; let base;
 before(async () => {
   env = await setup(); // fresh, migrated schema
-  Object.assign(process.env, { VERCEL: '1', NODE_ENV: 'production', DATABASE_URL: '', POSTGRES_URL: process.env.TEST_DATABASE_URL || 'postgres://tta:tta_dev_password@localhost:5432/tta_test' });
+  Object.assign(process.env, { VERCEL: '1', DEMO_MODE: 'false', NODE_ENV: 'production', DATABASE_URL: '', POSTGRES_URL: process.env.TEST_DATABASE_URL || 'postgres://tta:tta_dev_password@localhost:5432/tta_test' });
   const { default: handler } = await import('../api/index.mjs');
   server = http.createServer(handler);
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(async () => { await new Promise((r) => server.close(r)); await env.close(); for (const k of ['VERCEL', 'NODE_ENV', 'DATABASE_URL', 'POSTGRES_URL']) delete process.env[k]; });
+after(async () => { await new Promise((r) => server.close(r)); await env.close(); for (const k of ['VERCEL', 'DEMO_MODE', 'NODE_ENV', 'DATABASE_URL', 'POSTGRES_URL']) delete process.env[k]; });
 
 test('Vercel handler serves the API using POSTGRES_URL with production cookies and a 3 MB upload cap', async () => {
   const c = new ApiClient(base);

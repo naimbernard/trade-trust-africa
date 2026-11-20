@@ -47,9 +47,11 @@ function shell(content) {
     : '<div class="who"><a class="btn sm ghost hide-sm" href="#/login" data-style="background:transparent;color:#fff;border-color:#ffffff55">Sign in</a><a class="btn sm gold" href="#/register">Register</a></div>'}
     </div></header>
     <main class="page" id="main">
-      <div class="pilot" role="note"><strong>Pilot platform.</strong> No payments are processed and no funds are held. Verification labels show only the checks completed. Records marked DEMO are fictional.</div>
+      ${S.meta?.flags?.demoMode
+        ? `<div class="pilot demo" role="note"><strong>This is a demo brought to you by ${esc(S.meta.flags.demoBrand)}.</strong> All companies, scores, verifications and data are used for demonstration purposes only. No payments are processed.</div>`
+        : '<div class="pilot" role="note"><strong>Pilot platform.</strong> No payments are processed and no funds are held. Verification labels show only the checks completed. Records marked DEMO are fictional.</div>'}
       ${content}
-      <footer class="footer">Trade Trust Africa · Connecting global commerce. Building African industry. · Pilot software: legal review required before relying on agreements.</footer>
+      <footer class="footer">Trade Trust Africa · Connecting global commerce. Building African industry.${S.meta?.flags?.demoMode ? ` · Demo by ${esc(S.meta.flags.demoBrand)}. Demonstration data only.` : ' · Pilot software: legal review required before relying on agreements.'}</footer>
     </main>
     <nav class="bottom" aria-label="Quick">${mobile.map(([h, t, ic]) => `<a href="${h}" class="${active(h) ? 'on' : ''}">${icon(ic)}<span>${t}</span></a>`).join('')}</nav>`;
 }

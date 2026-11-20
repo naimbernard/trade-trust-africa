@@ -107,3 +107,9 @@ export const canBuy = () => !!S.meta?.orgTypes?.[orgType()]?.buys;
 export const canAct = () => ['owner', 'admin', 'trader'].includes(S.me.org?.memberRole);
 export const isManager = () => ['owner', 'admin'].includes(S.me.org?.memberRole);
 export const empty = (text) => `<div class="empty">${esc(text)}</div>`;
+
+// ---------- AfCFTA ----------
+export const isAfcfta = (c) => !!c && !!S.meta?.afcfta?.includes(c);
+export const afcftaPill = (c) => (isAfcfta(c) ? '<span class="pill passed" title="Based in an African Continental Free Trade Area member state">AfCFTA</span>' : '');
+export const AFCFTA_NOTE = 'may qualify for reduced or zero import tariffs under the African Continental Free Trade Area (AfCFTA), subject to AfCFTA rules of origin and each country\'s implementation of its tariff schedule.';
+export const afcftaNotice = (text) => `<div class="notice afcfta"><strong>AfCFTA free trade.</strong> ${esc(text)}</div>`;

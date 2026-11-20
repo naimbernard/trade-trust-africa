@@ -59,7 +59,7 @@ export default function listingRoutes(router, { config }) {
     const { q = '', kind = '', category = '', country = '', max_price = '', sort = 'relevance' } = ctx.query;
     const page = Math.max(1, Math.min(50, Number(ctx.query.page) || 1));
     const params = []; const where = [`l.status='active'`, `o.status='active'`];
-    if (!ctx.user) where.push('not o.pitch_preview');
+    if (!ctx.user && !config.demoMode) where.push('not o.pitch_preview');
     let rank = 'l.created_at';
     if (q.trim()) {
       params.push(q.slice(0, 120));
@@ -80,7 +80,7 @@ export default function listingRoutes(router, { config }) {
     if (!isUuid(ctx.params.id)) fail(404, 'Listing not found');
     const row = await one(ctx.pool, `${SELECT} where l.id=$1`, [ctx.params.id]);
     const mine = row && ctx.org?.id === row.org_id;
-    if (!row || (!mine && row.status !== 'active') || (row.org_pitch && !ctx.user)) fail(404, 'Listing not found');
+    if (!row || (!mine && row.status !== 'active') || (row.org_pitch && !ctx.user && !config.demoMode)) fail(404, 'Listing not found');
     const [withT] = await withTrust(ctx, [row]);
     return { ...withT, mine };
   });

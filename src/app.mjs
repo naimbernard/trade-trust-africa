@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { Router, HttpError, readBody, parseCookies, SECURITY_HEADERS, RateLimiter, serveStatic } from './http.mjs';
 import { cookieName, loadSession, principal } from './auth.mjs';
 import { safeEqual } from './security.mjs';
+import { GATE_PUBLIC_PATHS, GATE_HEADERS, gatePage, gateCookie, hasGatePass } from './gate.mjs';
 
 import authRoutes from './routes/auth.mjs';
 import orgRoutes from './routes/organisations.mjs';
@@ -68,6 +69,23 @@ export function createHandler({ pool, config, logger = console }) {
     send(res, ctx.status || 200, result ?? { ok: true }, ctx.headers);
   }
 
+  /** Demo password gate. Returns true when the request may continue. Mirrors middleware.js used on Vercel. */
+  async function passGate(req, res, url) {
+    if (url.pathname === '/__gate' && req.method === 'POST') {
+      let body = '';
+      for await (const chunk of req) { body += chunk; if (body.length > 2000) break; }
+      if (new URLSearchParams(body).get('password') === config.gatePassword) {
+        res.writeHead(303, { Location: '/', 'Set-Cookie': await gateCookie(config.gatePassword, config.secureCookies), 'Cache-Control': 'no-store' });
+      } else res.writeHead(401, GATE_HEADERS);
+      res.end(res.statusCode === 401 ? gatePage({ brand: config.demoBrand, error: true }) : undefined);
+      return false;
+    }
+    if (GATE_PUBLIC_PATHS.has(url.pathname) || (await hasGatePass(req.headers.cookie, config.gatePassword))) return true;
+    if (url.pathname.startsWith('/api/')) send(res, 401, { error: 'Demo password required' });
+    else { res.writeHead(401, GATE_HEADERS); res.end(gatePage({ brand: config.demoBrand })); }
+    return false;
+  }
+
   return async (req, res) => {
     const started = Date.now();
     const ip = config.trustProxy ? String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress : req.socket.remoteAddress;
@@ -75,6 +93,7 @@ export function createHandler({ pool, config, logger = console }) {
     try {
       url = new URL(req.url, 'http://localhost');
       if (config.production) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+      if (config.siteGate && !(await passGate(req, res, url))) return;
       if (url.pathname.startsWith('/api/')) await handleApi(req, res, url, ip);
       else if (req.method !== 'GET' && req.method !== 'HEAD') send(res, 405, { error: 'Method not allowed' });
       else if (!serveStatic(PUBLIC_DIR, url.pathname, res)) send(res, 404, { error: 'Not found' });

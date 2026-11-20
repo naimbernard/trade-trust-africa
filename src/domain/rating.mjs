@@ -77,7 +77,23 @@ export function computeRating(org, checks, { acceptedDocs = 0, completedDeals = 
 }
 
 /** Full trust profile for one organisation (label + rating + checks). */
+/** Presentation demo: full score and all checks shown as passed, explicitly labelled as demo data. */
+export function demoTrust() {
+  const now = new Date(); const next = new Date(now.getTime() + 365 * 86400000).toISOString();
+  return {
+    verification: { code: 'verified', label: 'Verified (demo data)' },
+    rating: {
+      score: 100, max: 100, band: 'Trade-ready', confidence: 'high', outstanding: [], method: 'demo-showcase', computedAt: now.toISOString(),
+      components: [['profile', 'Profile completeness', 15], ['checks', 'Evidence-based checks', 50], ['documents', 'Accepted supporting documents', 10], ['track_record', 'Completed trades on TTA (both parties confirmed)', 25]]
+        .map(([key, label, max]) => ({ key, label, points: max, max })),
+      disclaimer: 'Demonstration data only. This score and these verifications are illustrative and are not a real assessment of the company.',
+    },
+    checks: Object.entries(VERIFICATION_CHECKS).map(([type, c]) => ({ type, label: c.label, status: 'passed', method: 'demo_data', checkedAt: now.toISOString(), expiresAt: next })),
+  };
+}
+
 export async function trustProfile(q, config, orgId) {
+  if (config.demoMode) return (await one(q, 'select 1 from organisations where id=$1', [orgId])) ? demoTrust() : null;
   const org = await one(q, 'select * from organisations where id=$1', [orgId]);
   if (!org) return null;
   const checks = await latestChecks(q, orgId);

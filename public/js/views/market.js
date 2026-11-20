@@ -1,6 +1,7 @@
 import {
   S, esc, api, post, forms, actions, go, toast, openModal, closeModal, rerender, country, money, num, dt, day, pill, demo, trustBadge,
   priceRange, orgTypeLabel, options, countryOptions, canSell, canBuy, canAct, empty, requireAuth, label,
+  isAfcfta, afcftaPill, afcftaNotice, AFCFTA_NOTE,
 } from '../core.js';
 
 const pitchPill = (on) => (on ? '<span class="pill pending" title="Illustrative pitch profile. Not affiliated with or operated by this company.">Illustrative profile</span>' : '');
@@ -11,7 +12,7 @@ const listingCard = (l) => `<article class="card listing">
   <h3><a href="#/listing/${l.id}">${esc(l.title)}</a></h3>
   <div class="small muted">${l.origin_country ? `Origin ${esc(country(l.origin_country))}` : ''}${l.destination_country ? `Destination ${esc(country(l.destination_country))}` : ''}${l.quantity ? ` · ${num(l.quantity)} ${esc(l.unit || '')}` : ''}</div>
   <div class="strong">${esc(priceRange(l))}</div>
-  <div class="small"><a href="#/org/${l.org_id}">${esc(l.org_name)}</a> · ${esc(country(l.org_country))}</div>
+  <div class="small"><a href="#/org/${l.org_id}">${esc(l.org_name)}</a> · ${esc(country(l.org_country))} ${afcftaPill(l.org_country)}</div>
   <div>${trustBadge(l)}</div>
 </article>`;
 
@@ -63,8 +64,11 @@ export async function listing({ id }) {
   </div>
   <div class="card stack"><h2>${l.kind === 'offer' ? 'Supplier' : 'Buyer'}</h2>
     <div class="row"><a class="strong" href="#/org/${l.org_id}">${esc(l.org_name)}</a>${demo(l.org_demo)}</div>
-    <div class="small muted">${esc(orgTypeLabel(l.org_type))} · ${esc(country(l.org_country))}</div>
+    <div class="small muted">${esc(orgTypeLabel(l.org_type))} · ${esc(country(l.org_country))} ${afcftaPill(l.org_country)}</div>
     <div>${trustBadge(org.trust)}</div>
+    ${isAfcfta(l.org_country) ? afcftaNotice(S.me.org && isAfcfta(S.me.org.country) && S.me.org.id !== l.org_id
+    ? `You and ${l.org_name} are both in AfCFTA member states. This trade ${AFCFTA_NOTE}`
+    : `${l.org_name} is in an AfCFTA member state. Trade with businesses in other African member states ${AFCFTA_NOTE}`) : ''}
     <div class="small">${esc(r.band)} · ${esc(r.confidence)} confidence</div>
     ${org.trust.checks.length ? org.trust.checks.map((c) => `<div class="row small">${pill(c.status)} ${esc(c.label)} ${c.method ? `<span class="micro muted">${esc(label(c.method))}</span>` : ''}</div>`).join('') : '<p class="small muted">No verification checks recorded yet.</p>'}
     <p class="micro muted">${esc(r.disclaimer)}</p>
@@ -86,7 +90,8 @@ export async function orgProfile({ id }) {
   const { organisation: o, trust: t, listings } = await api(`/api/organisations/${id}`);
   return `<p class="small"><a href="#/market">← Marketplace</a></p><div class="cols">
   <div class="card stack">${pitchNotice(o.pitch_preview, o.pitch_notice)}<div class="row"><h1 data-style="margin:0">${esc(o.name)}</h1>${demo(o.is_demo)}</div>
-    <div class="muted">${esc(orgTypeLabel(o.org_type))} · ${esc(o.city ? `${o.city}, ` : '')}${esc(country(o.country))}</div>
+    <div class="muted">${esc(orgTypeLabel(o.org_type))} · ${esc(o.city ? `${o.city}, ` : '')}${esc(country(o.country))} ${afcftaPill(o.country)}</div>
+    ${isAfcfta(o.country) ? afcftaNotice(`${o.name} is in an AfCFTA member state. Trade with businesses in other African member states ${AFCFTA_NOTE}`) : ''}
     ${o.website ? `<div class="small"><a href="${esc(o.website)}" rel="noopener noreferrer nofollow" target="_blank">${esc(o.website)}</a></div>` : ''}
     ${o.description ? `<p data-style="white-space:pre-wrap">${esc(o.description)}</p>` : ''}
     ${o.sectors?.length ? `<div class="row">${o.sectors.map((s) => `<span class="pill">${esc(s)}</span>`).join('')}</div>` : ''}

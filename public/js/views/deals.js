@@ -1,6 +1,6 @@
 import {
   S, esc, api, post, forms, actions, go, toast, openModal, closeModal, rerender, country, money, dt, day, pill, demo, trustBadge,
-  options, empty, requireAuth, label, cap, payLabel, canAct,
+  options, empty, requireAuth, label, cap, payLabel, canAct, isAfcfta, afcftaPill, afcftaNotice, AFCFTA_NOTE,
 } from '../core.js';
 
 let current = null; // last loaded trade room detail (for modals)
@@ -43,6 +43,7 @@ export async function deal({ id }) {
     <div class="row between"><span class="mono muted">${esc(d.deal.ref)}</span><span class="row">${demo(d.deal.is_demo)}${pill(d.deal.status)}</span></div>
     <h1 data-style="margin:0">${esc(d.deal.title)}</h1>
     ${d.readOnly ? '<div class="notice warn">Read-only staff view. This access is recorded in the audit log.</div>' : `<div class="small">You are the <strong>${esc(d.mySide)}</strong>. Counterparty: <a href="#/org/${cp.id}">${esc(cp.name)}</a> (${esc(country(cp.country))}) ${trustBadge(cp.trust)}</div>`}
+    ${isAfcfta(d.buyer.country) && isAfcfta(d.seller.country) && d.buyer.country !== d.seller.country ? afcftaNotice(`Both parties are in AfCFTA member states (${country(d.seller.country)} to ${country(d.buyer.country)}). This trade ${AFCFTA_NOTE} Request a certificate of origin from the seller.`) : ''}
     <div class="row between small"><strong>Commercial terms</strong><span class="muted">${agreed} of ${d.stages.length} mutually agreed</span></div>
     <div class="bar"><span data-style="width:${pct}%"></span></div>
     <div class="row"><a class="btn sm ghost" href="/api/deals/${d.deal.id}/summary.pdf">${d.agreements.some((a) => !a.superseded_at) ? 'Download agreement PDF' : 'Download draft PDF'}</a></div>
@@ -91,7 +92,7 @@ function termsTab(d) {
     ${['negotiating', 'terms_agreed', 'completed'].includes(d.deal.status) ? '<button class="btn sm ghost" data-action="dispute">Raise a dispute</button>' : ''}</div>`;
   return `<div class="cols"><div class="stack">${d.stages.map((s) => stageCard(d, s)).join('')}${controls}</div>
     <div class="stack">${completion}
-      <div class="card stack"><h2>Parties</h2>${['buyer', 'seller'].map((s) => `<div class="item"><div class="micro muted">${cap(s)}</div><a class="strong" href="#/org/${d[s].id}">${esc(d[s].name)}</a> ${demo(d[s].is_demo)}<div class="small muted">${esc(country(d[s].country))}</div><div data-style="margin-top:4px">${trustBadge(d[s].trust)}</div></div>`).join('')}</div>
+      <div class="card stack"><h2>Parties</h2>${['buyer', 'seller'].map((s) => `<div class="item"><div class="micro muted">${cap(s)}</div><a class="strong" href="#/org/${d[s].id}">${esc(d[s].name)}</a> ${demo(d[s].is_demo)}<div class="small muted">${esc(country(d[s].country))} ${afcftaPill(d[s].country)}</div><div data-style="margin-top:4px">${trustBadge(d[s].trust)}</div></div>`).join('')}</div>
       ${d.agreements.length ? `<div class="card"><h2>Agreement records</h2>${d.agreements.map((a) => `<div class="item small"><div class="row">${pill(a.superseded_at ? 'void' : 'agreed', a.superseded_at ? 'Superseded' : 'Current')} Version ${a.version} · ${dt(a.created_at)}</div><div class="mono muted">SHA-256 ${esc(a.sha256)}</div></div>`).join('')}</div>` : ''}
       ${disputes}
       <div class="notice small">The 10-minute target is about reaching agreement on commercial terms. It is not a promise of payment, delivery, finance or legal compliance.</div>

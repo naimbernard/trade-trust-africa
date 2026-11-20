@@ -146,3 +146,5 @@ table.t th{color:var(--muted);font-weight:700;font-size:.74rem;text-transform:up
 }
 @media (min-width:980px) and (max-width:1240px){.chip-org{display:none}.top nav a{padding:8px 8px;font-size:.85rem}}
 @media print{.top,.bottom,.btn,.pilot{display:none!important}body{background:#fff}}
+.notice.afcfta{background:var(--green-bg);border-color:#9fdcbf;color:#0b5e3e}
+.pilot.demo{background:#f1e8fb;border-color:#d9c6f2;color:#4f2a85}
