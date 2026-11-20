@@ -1,5 +1,5 @@
 // Runs as Vercel's build command: applies migrations and optional one-time bootstrap tasks.
-//   BOOTSTRAP_ADMIN_EMAIL + BOOTSTRAP_ADMIN_PASSWORD  create the first platform admin if that email does not exist yet
+//   BOOTSTRAP_ADMIN_EMAIL + BOOTSTRAP_ADMIN_PASSWORD  create the platform admin, or reset its password and lockout
 //   SEED_DEMO=true + DEMO_PASSWORD                    load fictional DEMO data (never with the public default password)
 import { spawnSync } from 'node:child_process';
 import { createPool } from '../src/db.mjs';
@@ -21,12 +21,13 @@ const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 if (email && password) {
   const problem = passwordProblem(password);
   if (problem) { console.error(`BOOTSTRAP_ADMIN_PASSWORD rejected: ${problem}`); process.exit(1); }
+  // Creates the admin, or resets its password, role, status and lockout to match the Vercel settings.
   const r = await pool.query(`insert into users (email, full_name, password_hash, platform_role) values ($1,'Platform Administrator',$2,'platform_admin')
-                              on conflict (email) do nothing returning id`, [email, await hashPassword(password)]);
-  if (r.rowCount) {
-    await pool.query(`insert into audit_log (action, entity_type, entity_id, data) values ('platform_admin_bootstrapped','user',$1,'{}')`, [r.rows[0].id]);
-    console.log(`Platform admin created: ${email}. Remove BOOTSTRAP_ADMIN_PASSWORD from Vercel settings now.`);
-  } else console.log(`Platform admin ${email} already exists; nothing changed.`);
+                              on conflict (email) do update set password_hash=excluded.password_hash, platform_role='platform_admin', status='active', failed_logins=0, locked_until=null
+                              returning id, (xmax = 0) as created`, [email, await hashPassword(password)]);
+  const { id, created } = r.rows[0];
+  await pool.query(`insert into audit_log (action, entity_type, entity_id, data) values ($1,'user',$2,'{}')`, [created ? 'platform_admin_bootstrapped' : 'platform_admin_password_reset_by_deploy', String(id)]);
+  console.log(`Platform admin ${created ? 'created' : 'password reset'}: ${email}. Remove BOOTSTRAP_ADMIN_PASSWORD from Vercel settings once you can sign in.`);
 }
 await pool.end();
 
