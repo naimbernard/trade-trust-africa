@@ -36,7 +36,7 @@ Create a real platform admin: `TTA_ADMIN_PASSWORD='...' npm run create-admin -- 
 
 Other commands:
 
-* `npm test` runs 53 integration tests against the `tta_test` database (wiped each run).
+* `npm test` runs 60 integration tests against the `tta_test` database (wiped each run).
 * `npm run db:reset` drops and recreates the development schema (refuses in production).
 * `npm run dev` restarts on file changes.
 * `node scripts/e2e-smoke.cjs` drives a browser through every role on desktop and mobile (needs Playwright and a running, freshly seeded server; screenshots go to `e2e-shots/`).
@@ -60,13 +60,19 @@ Vercel specifics, applied automatically when the `VERCEL` variable is present:
 * Proxy headers are trusted, and cookies use the `__Host-` prefix with `Secure`.
 * Login rate limiting is per function instance. Add Vercel Firewall rate limiting rules for `/api/auth/*` before public launch.
 
+### Guided trade flow (Deal chat)
+
+Every Trade Room opens on **Deal chat**: preset messages, then **Negotiate price** (price, quantity, payment method, due days, delivery term and an optional note). The other side taps **Sell at this price** / **Buy at this price**, **Counter offer** or **Decline**. Accepting one offer agrees every term at once (both approvals on the same revision) and creates the hashed agreement record.
+
+After agreement a 7 step tracker guides the trade, with a **Your turn** or **Waiting for** banner: the buyer's trade finance decision (request offers from partner banks and choose one, or pay directly), seller export documents, shipment, buyer delivery confirmation, buyer payment, seller payment confirmation, then completion. The confirmed payment date is recorded against the agreed due date in the payer's **Payment history** (12 months, minimum 1 month). Company age comes from the incorporation date on the certificate of incorporation; companies under 3 months old are flagged as new.
+
 ### Demo mode (on by default on Vercel)
 
 The live Vercel site runs as a private presentation demo by Mavorra Creative:
 
 * The whole site, including the API, sits behind a password gate (`middleware.js`). The password is `SITE_GATE_PASSWORD`, default `123`. The gate is a shared demo password, not account security.
 * Every company shows a 100 Trade-Ready score with all checks passed, labelled "Verified (demo data)". A banner on every page says all data is for demonstration only.
-* Pitch profiles are loaded on each deploy (`scripts/seed-pitch.mjs`): Bernard Builders & Real Estate, Goevia Builders, Gadre Marine and the fictional Coastline Wholesale Fish (DEMO). Their logins are `bernard@pitch.tta`, `goevia@pitch.tta`, `gadre@pitch.tta` and `wholesalefish@pitch.tta`, using `PITCH_PASSWORD` or else the admin bootstrap password.
+* Pitch profiles are loaded on each deploy (`scripts/seed-pitch.mjs`): Bernard Builders & Real Estate, Goevia Builders, Gadre Marine and the fictional Coastline Wholesale Fish (DEMO), plus two fictional partner banks that reply instantly to finance requests. Logins: `bernard@pitch.tta`, `goevia@pitch.tta`, `gadre@pitch.tta`, `wholesalefish@pitch.tta`, `bank1@pitch.tta` and `bank2@pitch.tta`, using `PITCH_PASSWORD` or else the admin bootstrap password.
 * Businesses in AfCFTA member states get an AfCFTA badge, and a note that trade with other African member states may qualify for reduced or zero tariffs, subject to rules of origin.
 
 To switch to the real pilot (real scores and an open site), set `DEMO_MODE=false` and redeploy. Set `SITE_GATE=off` to keep demo scores without the password.

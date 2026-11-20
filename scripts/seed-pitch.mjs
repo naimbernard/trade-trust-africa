@@ -12,7 +12,7 @@ const notice = (name) => `Illustrative pitch profile prepared by Trade Trust Afr
 
 export const PITCH = [
   {
-    email: 'bernard@pitch.tta', fullName: 'Bernard Builders Procurement',
+    email: 'bernard@pitch.tta', fullName: 'Bernard Builders Procurement', incorporated: '2018-03-01', history: 12,
     org: {
       name: 'Bernard Builders & Real Estate', org_type: 'buyer', country: 'GH', city: 'Accra',
       description: 'Ghana based property development and real estate advisory firm serving international and high net worth clients, including the Ghanaian diaspora in the UK, USA, Canada and Germany. Sourcing construction materials for residential developments in Ghana.',
@@ -24,7 +24,7 @@ export const PITCH = [
     ],
   },
   {
-    email: 'goevia@pitch.tta', fullName: 'Goevia Builders (pitch profile)',
+    email: 'goevia@pitch.tta', fullName: 'Goevia Builders (pitch profile)', incorporated: '2019-06-01', history: 10,
     org: {
       name: 'Goevia Builders', org_type: 'buyer', country: 'IN', city: 'Siolim, Goa',
       description: 'Construction and property development company based in Siolim, Goa, India. Sourcing concrete and steel for building projects in Goa.',
@@ -36,7 +36,7 @@ export const PITCH = [
     ],
   },
   {
-    email: 'gadre@pitch.tta', fullName: 'Gadre Marine (pitch profile)',
+    email: 'gadre@pitch.tta', fullName: 'Gadre Marine (pitch profile)', incorporated: '1970-01-01', history: 12,
     org: {
       name: 'Gadre Marine', org_type: 'manufacturer', country: 'IN', city: 'Ratnagiri',
       description: 'Founded in 1970, with its first factory established in Ratnagiri, India in 1978. One of the world\'s largest surimi manufacturers and a major frozen seafood exporter, with operations extending to Europe including GADRE MARINE UK LTD. Product range includes crab sticks, chikuwa, fish balls, frozen prawns and ready to eat seafood dishes.',
@@ -51,7 +51,7 @@ export const PITCH = [
     ],
   },
   {
-    email: 'wholesalefish@pitch.tta', fullName: 'Coastline Wholesale Fish (DEMO)',
+    email: 'wholesalefish@pitch.tta', fullName: 'Coastline Wholesale Fish (DEMO)', incorporatedDaysAgo: 49, history: 2,
     org: {
       name: 'Coastline Wholesale Fish Ltd (DEMO)', org_type: 'importer', country: 'GH', city: 'Tema', demo: true,
       description: 'Fictional Ghanaian wholesale fish and frozen seafood distributor supplying markets, supermarkets and hotels in Accra and Tema. Created for demonstration only.',
@@ -61,6 +61,18 @@ export const PITCH = [
       { kind: 'request', title: 'Buying frozen crab sticks and surimi products for Ghana wholesale', category: 'Frozen seafood', hs_code: '160420', destination_country: 'GH', incoterms: ['CIF', 'CFR'], description: 'Monthly supply of frozen crab sticks, fish balls and other surimi products delivered to Tema port. Cold chain at minus 18C required. Volumes and pricing to be agreed.' },
       { kind: 'request', title: 'Buying frozen prawns for wholesale distribution in Ghana', category: 'Frozen seafood', hs_code: '030617', destination_country: 'GH', incoterms: ['CIF'], description: 'Frozen prawns in mixed sizes for wholesale customers in Accra and Tema. Health certificates required. Volumes and pricing to be agreed.' },
     ],
+  },
+  {
+    email: 'bank1@pitch.tta', fullName: 'Atlantic Trade Bank (DEMO)', incorporated: '2004-05-12',
+    org: { name: 'Atlantic Trade Bank (DEMO)', org_type: 'finance', country: 'GH', city: 'Accra', demo: true, pitch: false,
+      description: 'Fictional partner bank for demonstration: Letters of Credit, LC confirmation and import finance.', sectors: ['Trade finance'] },
+    listings: [],
+  },
+  {
+    email: 'bank2@pitch.tta', fullName: 'Gold Coast Trade Finance (DEMO)', incorporated: '2011-09-01',
+    org: { name: 'Gold Coast Trade Finance (DEMO)', org_type: 'finance', country: 'GH', city: 'Accra', demo: true, pitch: false,
+      description: 'Fictional partner finance house for demonstration: invoice finance and supply chain finance.', sectors: ['Trade finance'] },
+    listings: [],
   },
 ];
 
@@ -90,7 +102,27 @@ export async function seedPitch(pool, password, log = console.log) {
       log(`Pitch profile created: ${o.name} (${p.email})${o.pitch ? ' [illustrative, hidden from public]' : ''}`);
     });
   }
+  await seedDemoHistory(pool);
   return created;
+}
+
+/** Demo only: company ages and 12 months of on-time payment records (source 'demo', shown only when DEMO_MODE is on). */
+export async function seedDemoHistory(pool) {
+  const countries = ['GH', 'NG', 'IN', 'GB', 'AE', 'KR', 'CI', 'SN'];
+  for (const p of PITCH) {
+    const org = (await pool.query('select m.org_id from memberships m join users u on u.id=m.user_id where u.email=$1 limit 1', [p.email])).rows[0];
+    if (!org) continue;
+    if (p.incorporated) await pool.query('update organisations set incorporated_on=$2 where id=$1 and incorporated_on is null', [org.org_id, p.incorporated]);
+    if (p.incorporatedDaysAgo) await pool.query('update organisations set incorporated_on=current_date - $2::int where id=$1 and incorporated_on is null', [org.org_id, p.incorporatedDaysAgo]);
+    const has = (await pool.query(`select 1 from payment_records where payer_org_id=$1 and source='demo' limit 1`, [org.org_id])).rowCount;
+    if (has || !p.history) continue;
+    for (let i = 0; i < p.history; i++) {
+      const daysAgo = p.history <= 2 ? 10 + i * 18 : 12 + i * 30;
+      const amount = 18000 + ((i * 7919 + p.email.length * 1013) % 70000);
+      await pool.query(`insert into payment_records (payer_org_id, amount, currency, due_date, paid_on, counterparty_country, source)
+                        values ($1,$2,'USD', current_date - $3::int + 3, current_date - $3::int, $4, 'demo')`, [org.org_id, amount, daysAgo, countries[(i + p.email.length) % countries.length]]);
+    }
+  }
 }
 
 // CLI: node scripts/seed-pitch.mjs   (password from PITCH_PASSWORD)

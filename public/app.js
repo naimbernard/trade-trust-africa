@@ -78,6 +78,7 @@ async function render() {
   if (seq !== renderSeq) return; // a newer navigation won
   app.innerHTML = shell(html ?? '');
   applyStyles(app);
+  const log = document.getElementById('chat-log'); if (log) log.scrollTop = log.scrollHeight;
   document.title = `Trade Trust Africa${path !== '/' ? ` · ${path.split('/')[1]}` : ''}`;
 }
 

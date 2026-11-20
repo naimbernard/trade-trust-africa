@@ -36,6 +36,7 @@ forms.search = async (d) => { const p = new URLSearchParams(Object.entries(d).fi
 export async function listing({ id }) {
   const l = await api(`/api/listings/${id}`);
   const org = await api(`/api/organisations/${l.org_id}`);
+  const hist = await api(`/api/organisations/${l.org_id}/history`).catch(() => null);
   const r = org.trust.rating;
   const iCanTrade = S.me.org && !l.mine && canAct() && ((l.kind === 'offer' && canBuy()) || (l.kind === 'request' && canSell()));
   return `<p class="small"><a href="#/market">← Marketplace</a></p>
@@ -72,7 +73,7 @@ export async function listing({ id }) {
     <div class="small">${esc(r.band)} · ${esc(r.confidence)} confidence</div>
     ${org.trust.checks.length ? org.trust.checks.map((c) => `<div class="row small">${pill(c.status)} ${esc(c.label)} ${c.method ? `<span class="micro muted">${esc(label(c.method))}</span>` : ''}</div>`).join('') : '<p class="small muted">No verification checks recorded yet.</p>'}
     <p class="micro muted">${esc(r.disclaimer)}</p>
-  </div></div>`;
+  </div>${hist ? historyCard(hist) : ''}</div>`;
 }
 actions['open-deal'] = async (el) => {
   if (!requireAuth()) return;
@@ -88,6 +89,7 @@ forms.enquiry = async (d, f) => { await post(`/api/listings/${f.dataset.id}/enqu
 
 export async function orgProfile({ id }) {
   const { organisation: o, trust: t, listings } = await api(`/api/organisations/${id}`);
+  const hist = await api(`/api/organisations/${id}/history`).catch(() => null);
   return `<p class="small"><a href="#/market">← Marketplace</a></p><div class="cols">
   <div class="card stack">${pitchNotice(o.pitch_preview, o.pitch_notice)}<div class="row"><h1 data-style="margin:0">${esc(o.name)}</h1>${demo(o.is_demo)}</div>
     <div class="muted">${esc(orgTypeLabel(o.org_type))} · ${esc(o.city ? `${o.city}, ` : '')}${esc(country(o.country))} ${afcftaPill(o.country)}</div>
@@ -96,7 +98,28 @@ export async function orgProfile({ id }) {
     ${o.description ? `<p data-style="white-space:pre-wrap">${esc(o.description)}</p>` : ''}
     ${o.sectors?.length ? `<div class="row">${o.sectors.map((s) => `<span class="pill">${esc(s)}</span>`).join('')}</div>` : ''}
     <h2 data-style="margin-top:12px">Listings</h2>${listings.length ? listings.map((l) => `<div class="item"><a href="#/listing/${l.id}">${esc(l.title)}</a> <span class="small muted">${esc(priceRange(l))}</span></div>`).join('') : empty('No active listings')}
-  </div>${trustPanel(t)}</div>`;
+  </div><div class="stack">${trustPanel(t)}${hist ? historyCard(hist) : ''}</div></div>`;
+}
+
+/** Payment and trading history: on-time record, company age (from the incorporation certificate) and recent payments. */
+export function historyCard(h) {
+  const p = h.payments;
+  const years = h.ageDays != null ? Math.floor(h.ageDays / 365) : null;
+  const age = h.newCompany ? '<span class="pill pending">New company: under 3 months old</span>'
+    : h.ageEvidenced ? `<span class="pill passed">Incorporated ${esc(years >= 2 ? h.incorporatedOn.slice(0, 4) : day(h.incorporatedOn))}${years ? ` · ${years} year${years === 1 ? '' : 's'} trading` : ''}</span>`
+      : '<span class="pill">Company age not yet evidenced</span>';
+  const pct = p.onTimePct;
+  return `<div class="card stack history"><div class="row between"><h2 data-style="margin:0">Payment history</h2>${h.demo ? '<span class="pill demo">Demo data</span>' : ''}</div>
+    <div>${age}</div>
+    <div class="hist-stats">
+      <div><div class="hist-big ${pct == null ? '' : pct >= 90 ? 'good' : pct >= 70 ? 'ok' : 'bad'}">${pct == null ? 'n/a' : `${pct}%`}</div><div class="micro muted">paid on time</div></div>
+      <div><div class="hist-big">${p.count}</div><div class="micro muted">payments (12 months)</div></div>
+      <div><div class="hist-big">${p.late}</div><div class="micro muted">late${p.late ? `, avg ${p.avgDaysLate} days` : ''}</div></div>
+      <div><div class="hist-big">${h.completedTrades}</div><div class="micro muted">trades on TTA</div></div>
+    </div>
+    <p class="small ${h.sufficient ? 'muted' : ''}">${esc(h.note)}</p>
+    ${h.records.length ? `<table class="t"><thead><tr><th>Paid</th><th>Amount</th><th>Result</th></tr></thead><tbody>${h.records.slice(0, 6).map((r) => `<tr><td>${esc(day(r.paid_on))}</td><td>${esc(money(r.amount, r.currency))}</td><td>${r.on_time ? pill('passed', 'On time') : pill('failed', `${r.days_late} days late`)}</td></tr>`).join('')}</tbody></table>` : ''}
+    <p class="micro muted">Based on payments recorded through Trade Trust Africa over the last 12 months (minimum 1 month). Company age comes from the certificate of incorporation.</p></div>`;
 }
 
 export function trustPanel(t) {

@@ -3,6 +3,8 @@ import {
   options, empty, requireAuth, label, cap, payLabel, canAct, isAfcfta, afcftaPill, afcftaNotice, AFCFTA_NOTE,
 } from '../core.js';
 
+import { chatTab } from './tradechat.js';
+
 let current = null; // last loaded trade room detail (for modals)
 
 export async function dealsList() {
@@ -14,25 +16,26 @@ export async function dealsList() {
     <h3 data-style="margin:0">${esc(d.title)}</h3>
     <div class="small muted">You are the <strong>${esc(d.my_side)}</strong> · ${esc(d.my_side === 'buyer' ? d.seller_name : d.buyer_name)}</div>
     <div class="bar"><span data-style="width:${(100 * d.agreed) / d.total}%"></span></div>
-    <div class="row between small"><span>${d.agreed}/${d.total} terms agreed</span>${d.awaiting_me ? `<span class="pill pending">${d.awaiting_me} awaiting you</span>` : ''}</div>
+    <div class="row between small"><span>${d.current_step ? `Step: ${esc(d.current_step)}` : d.status === 'completed' ? 'Trade completed' : `${d.agreed}/${d.total} terms agreed`}</span>${d.awaiting_me ? '<span class="pill pending">Your turn</span>' : ''}</div>
     <div class="micro muted">Updated ${dt(d.updated_at)}</div></a>`).join('')}</div>`
     : empty('No Trade Rooms yet. Open one from a marketplace listing.')}`;
 }
 
-const TABS = [['terms', 'Terms'], ['messages', 'Messages'], ['documents', 'Documents'], ['logistics', 'Logistics'], ['finance', 'Finance'], ['activity', 'Activity']];
+const TABS = [['chat', 'Deal chat'], ['terms', 'Detailed terms'], ['messages', 'Messages'], ['documents', 'Documents'], ['logistics', 'Logistics'], ['finance', 'Finance'], ['activity', 'Activity']];
 const openForTerms = (d) => ['negotiating', 'terms_agreed'].includes(d.deal.status) && !d.completions.length;
 
 export async function deal({ id }) {
   if (!requireAuth()) return '';
   const q = new URLSearchParams(location.hash.split('?')[1] || '');
-  const tab = TABS.some(([k]) => k === q.get('tab')) ? q.get('tab') : 'terms';
+  const tab = TABS.some(([k]) => k === q.get('tab')) ? q.get('tab') : 'chat';
   const d = await api(`/api/deals/${id}`);
   current = d;
   const agreed = d.stages.filter((s) => s.status === 'agreed').length;
   const pct = Math.round((100 * agreed) / d.stages.length);
   const cp = d.mySide === 'buyer' ? d.seller : d.buyer;
   let body = '';
-  if (tab === 'terms') body = termsTab(d);
+  if (tab === 'chat') body = await chatTab(d);
+  else if (tab === 'terms') body = termsTab(d);
   else if (tab === 'messages') body = messagesTab(d);
   else if (tab === 'documents') body = await documentsTab(d);
   else if (tab === 'logistics') body = await logisticsTab(d);
@@ -44,8 +47,8 @@ export async function deal({ id }) {
     <h1 data-style="margin:0">${esc(d.deal.title)}</h1>
     ${d.readOnly ? '<div class="notice warn">Read-only staff view. This access is recorded in the audit log.</div>' : `<div class="small">You are the <strong>${esc(d.mySide)}</strong>. Counterparty: <a href="#/org/${cp.id}">${esc(cp.name)}</a> (${esc(country(cp.country))}) ${trustBadge(cp.trust)}</div>`}
     ${isAfcfta(d.buyer.country) && isAfcfta(d.seller.country) && d.buyer.country !== d.seller.country ? afcftaNotice(`Both parties are in AfCFTA member states (${country(d.seller.country)} to ${country(d.buyer.country)}). This trade ${AFCFTA_NOTE} Request a certificate of origin from the seller.`) : ''}
-    <div class="row between small"><strong>Commercial terms</strong><span class="muted">${agreed} of ${d.stages.length} mutually agreed</span></div>
-    <div class="bar"><span data-style="width:${pct}%"></span></div>
+    ${tab === 'chat' ? '' : `<div class="row between small"><strong>Commercial terms</strong><span class="muted">${agreed} of ${d.stages.length} mutually agreed</span></div>
+    <div class="bar"><span data-style="width:${pct}%"></span></div>`}
     <div class="row"><a class="btn sm ghost" href="/api/deals/${d.deal.id}/summary.pdf">${d.agreements.some((a) => !a.superseded_at) ? 'Download agreement PDF' : 'Download draft PDF'}</a></div>
   </div>
   <nav class="tabs" aria-label="Trade Room sections">${TABS.map(([k, t]) => `<a href="#/deal/${d.deal.id}?tab=${k}" class="${k === tab ? 'on' : ''}">${t}</a>`).join('')}</nav>
@@ -196,7 +199,8 @@ export async function readFileB64(file) {
 }
 forms.upload = async (d, f) => {
   const file = f.elements.file.files[0]; if (!file) throw new Error('Choose a file');
-  await post('/api/documents', { category: d.category, filename: file.name, content_base64: await readFileB64(file), deal_id: f.dataset.deal || undefined });
+  await post('/api/documents', { category: d.category, filename: file.name, content_base64: await readFileB64(file), deal_id: f.dataset.deal || undefined, issued_on: d.issued_on || undefined });
+  if (f.dataset.close) closeModal();
   toast('Document uploaded'); rerender();
 };
 actions['doc-review'] = async (el) => { await post(`/api/documents/${el.dataset.id}/review`, { decision: el.dataset.decision }); toast(`Document ${el.dataset.decision}`); rerender(); };
