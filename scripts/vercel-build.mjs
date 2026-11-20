@@ -17,7 +17,8 @@ const applied = await migrate(pool, (m) => console.log(m));
 console.log(applied.length ? `${applied.length} migration(s) applied` : 'Database schema up to date');
 
 const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
-const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+// Also accepts a common misspelling of the key so a typo in the Vercel dashboard does not block the first login.
+const password = process.env.BOOTSTRAP_ADMIN_PASSWORD || process.env.BOOTSRTAP_ADMIN_PASSWORD;
 if (email && password) {
   const problem = passwordProblem(password);
   if (problem) { console.error(`BOOTSTRAP_ADMIN_PASSWORD rejected: ${problem}`); process.exit(1); }
