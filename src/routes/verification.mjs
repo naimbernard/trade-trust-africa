@@ -3,6 +3,7 @@ import { one, many, tx } from '../db.mjs';
 import { requireOrg, requirePlatform, MANAGER_ROLES } from '../auth.mjs';
 import { VERIFICATION_CHECKS } from '../domain/constants.mjs';
 import { trustProfile } from '../domain/rating.mjs';
+import { syncIncorporation } from './documents.mjs';
 
 export default function verificationRoutes(router, { config }) {
   router.add('GET', '/api/verification', async (ctx) => {
@@ -82,6 +83,7 @@ export default function verificationRoutes(router, { config }) {
       await ctx.pool.query(`update documents set review_status=$2, reviewed_by=$3, reviewed_at=now() where id=$1 and review_status='submitted'`,
         [check.evidence_document_id, status === 'passed' ? 'accepted' : 'rejected', ctx.user.id]);
     }
+    await syncIncorporation(ctx.pool, config, check.org_id);
     await ctx.audit('verification_check_decided', 'verification_check', check.id, { org_id: check.org_id, check_type: check.check_type, status });
     return { ok: true };
   });

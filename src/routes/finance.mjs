@@ -9,7 +9,7 @@ export const CONSENT_TEXT = 'I consent to Trade Trust Africa sharing the selecte
   + 'institutions so they can decide whether to contact us. Trade Trust Africa does not lend, hold funds or guarantee any finance decision.';
 
 /** Freeze exactly the consented fields at the time of consent. Nothing else is ever exposed to financiers. */
-async function buildSharedFields(q, config, deal, keys) {
+export async function buildSharedFields(q, config, deal, keys) {
   const stages = await many(q, 'select key, status, proposal from deal_stages where deal_id=$1', [deal.id]);
   const st = (k) => stages.find((s) => s.key === k);
   const agreedFields = (k) => (st(k)?.status === 'agreed' ? st(k).proposal.fields : null);
@@ -35,6 +35,24 @@ async function buildSharedFields(q, config, deal, keys) {
   return out;
 }
 
+/** Demo mode only: fictional partner banks answer instantly so a presenter can run the whole flow alone. */
+export async function demoBankResponses(c, config, requestId, dealId, product) {
+  if (!config.demoMode) return 0;
+  const banks = (await c.query(`select o.id, o.name, (select m.user_id from memberships m where m.org_id=o.id order by m.created_at limit 1) as user_id
+                                   from organisations o where o.org_type='finance' and o.is_demo and o.status='active' order by o.name`)).rows.filter((b) => b.user_id);
+  const label = product.replaceAll('_', ' ');
+  const offers = [
+    'Indicative offer: we can support this trade. Facility up to 80% of contract value, pricing from 7.5% p.a., subject to credit approval and KYC.',
+    'Indicative offer: support available with a confirmed Letter of Credit or invoice finance. Pricing from 6.9% p.a., subject to credit approval.',
+  ];
+  for (const [i, b] of banks.entries()) {
+    await c.query(`insert into finance_responses (request_id, provider_org_id, user_id, decision, message) values ($1,$2,$3,'interested',$4) on conflict do nothing`,
+      [requestId, b.id, b.user_id, `${offers[i % offers.length]} (${label}; simulated demo response)`]);
+    await c.query(`insert into deal_events (deal_id, type, payload) values ($1,'finance_response',$2)`, [dealId, { request_id: requestId, provider: b.name, decision: 'interested', demo: true }]);
+  }
+  return banks.length;
+}
+
 export default function financeRoutes(router, { config }) {
   router.add('POST', '/api/deals/:id/finance-requests', async (ctx) => {
     requireOrg(ctx, ACTING_ROLES);
@@ -51,6 +69,7 @@ export default function financeRoutes(router, { config }) {
                                      values ($1,$2,$3,$4,$5,$6,now()) returning id`, [access.deal.id, ctx.org.id, ctx.user.id, product, shared, CONSENT_TEXT]);
     await ctx.pool.query(`insert into deal_events (deal_id, type, side, user_id, payload) values ($1,'finance_introduction_requested',$2,$3,$4)`, [access.deal.id, side, ctx.user.id, { request_id: row.id, product, shared_keys: keys }]);
     await ctx.audit('finance_request_created', 'finance_request', row.id, { shared_keys: keys });
+    await demoBankResponses(ctx.pool, config, row.id, access.deal.id, product);
     ctx.status = 201;
     return row;
   });

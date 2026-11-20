@@ -12,7 +12,7 @@ const HTML = Buffer.from('<html><script>alert(1)</script></html>').toString('bas
 test('uploads are type-checked by content, not by filename', async () => {
   const a = await env.org('exporter');
   assert.equal((await a.post('/api/documents', { category: 'other', filename: 'evil.pdf', content_base64: HTML })).status, 415);
-  const ok = await a.post('/api/documents', { category: 'certificate_of_incorporation', filename: '../../etc/cert.pdf', content_base64: PDF });
+  const ok = await a.post('/api/documents', { category: 'certificate_of_incorporation', filename: '../../etc/cert.pdf', content_base64: PDF, issued_on: '2015-01-01' });
   assert.equal(ok.status, 201); assert.equal(ok.data.review_status, 'submitted'); assert.equal(ok.data.scan_status, 'not_scanned');
   const list = await a.getOk('/api/documents');
   assert.ok(!list[0].filename.includes('/'));
@@ -38,7 +38,7 @@ test('nobody is shown as verified without a live provider; manual review only re
   const reviewer = await env.staff('reviewer');
   let t = (await env.client().getOk(`/api/organisations/${org.orgId}`)).trust;
   assert.equal(t.verification.code, 'unverified');
-  const doc = await org.ok('/api/documents', { category: 'certificate_of_incorporation', filename: 'inc.pdf', content_base64: PDF });
+  const doc = await org.ok('/api/documents', { category: 'certificate_of_incorporation', filename: 'inc.pdf', content_base64: PDF, issued_on: '2015-01-01' });
   await org.ok('/api/verification/request', { items: [{ check_type: 'business_registration', document_id: doc.id }, { check_type: 'sanctions_screening' }] });
   t = (await env.client().getOk(`/api/organisations/${org.orgId}`)).trust;
   assert.equal(t.verification.code, 'in_review');

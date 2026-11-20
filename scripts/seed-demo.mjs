@@ -58,7 +58,7 @@ await buyer.ok(`/api/deals/${deal.id}/messages`, { text: 'Fictional demo message
 
 // Profile evidence request so the reviewer queue is not empty.
 const tinyPdf = Buffer.from('%PDF-1.4\n% fictional demo document\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF').toString('base64');
-const doc = await cocoa.ok('/api/documents', { category: 'certificate_of_incorporation', filename: 'demo-incorporation.pdf', content_base64: tinyPdf });
+const doc = await cocoa.ok('/api/documents', { category: 'certificate_of_incorporation', filename: 'demo-incorporation.pdf', content_base64: tinyPdf, issued_on: '2012-06-01' });
 await cocoa.ok('/api/verification/request', { items: [{ check_type: 'business_registration', document_id: doc.id }, { check_type: 'sanctions_screening' }] });
 
 await pool.query('update deals set is_demo=true');

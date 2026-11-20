@@ -5,7 +5,7 @@ import { sha256 } from '../security.mjs';
 import { DOCUMENT_CATEGORIES } from '../domain/constants.mjs';
 import { loadDealFor, requireActingSide } from '../domain/deal-access.mjs';
 
-const META = `d.id, d.owner_org_id, d.deal_id, d.category, d.filename, d.mime, d.size_bytes, d.sha256, d.scan_status, d.review_status,
+const META = `d.id, d.owner_org_id, d.deal_id, d.category, d.issued_on, d.filename, d.mime, d.size_bytes, d.sha256, d.scan_status, d.review_status,
               d.review_note, d.reviewed_at, d.created_at, o.name as owner_org_name, u.full_name as uploaded_by_name`;
 
 /** Detect the real file type from its leading bytes. The declared filename / MIME are never trusted. */
@@ -32,6 +32,14 @@ export async function canReadDocument(ctx, q, doc) {
   return isStaff(ctx);
 }
 
+/** Company age comes from the incorporation date on the certificate of incorporation (accepted by a reviewer, or at upload in demo mode). */
+export async function syncIncorporation(q, config, orgId) {
+  await q.query(`update organisations set incorporated_on = (
+      select issued_on from documents where owner_org_id=$1 and deal_id is null and category='certificate_of_incorporation' and deleted_at is null
+         and issued_on is not null and (review_status='accepted' or ($2 and review_status<>'rejected')) order by created_at desc limit 1)
+    where id=$1`, [orgId, !!config.demoMode]);
+}
+
 export default function documentRoutes(router, { config }) {
   router.add('POST', '/api/documents', async (ctx) => {
     const org = requireOrg(ctx, ACTING_ROLES);
@@ -43,6 +51,8 @@ export default function documentRoutes(router, { config }) {
     if (buf.length > config.maxUploadBytes) fail(413, `Files must be ${Math.round(config.maxUploadBytes / 1048576)} MB or smaller`);
     const mime = sniffMime(buf);
     if (!mime) fail(415, 'Only PDF, PNG and JPEG files are accepted');
+    const issuedOn = v.date(ctx.body.issued_on, category === 'certificate_of_incorporation' ? 'Date of incorporation' : 'Document date', { optional: category !== 'certificate_of_incorporation' });
+    if (issuedOn && issuedOn > new Date().toISOString().slice(0, 10)) fail(400, 'The document date cannot be in the future');
     let dealId = null;
     if (ctx.body.deal_id) {
       const access = await loadDealFor(ctx, ctx.pool, ctx.body.deal_id);
@@ -51,10 +61,11 @@ export default function documentRoutes(router, { config }) {
       dealId = access.deal.id;
     }
     const row = await one(ctx.pool, `
-      insert into documents (owner_org_id, deal_id, uploaded_by, category, filename, mime, size_bytes, sha256, content, retain_until)
-      values ($1,$2,$3,$4,$5,$6,$7,$8,$9, case when $2::uuid is null then null else (now() + interval '7 years')::date end)
+      insert into documents (owner_org_id, deal_id, uploaded_by, category, filename, mime, size_bytes, sha256, content, retain_until, issued_on)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9, case when $2::uuid is null then null else (now() + interval '7 years')::date end, $10)
       returning id, sha256, scan_status, review_status`,
-    [org.id, dealId, ctx.user.id, category, filename, mime, buf.length, sha256(buf), buf]);
+    [org.id, dealId, ctx.user.id, category, filename, mime, buf.length, sha256(buf), buf, issuedOn]);
+    if (!dealId && category === 'certificate_of_incorporation') await syncIncorporation(ctx.pool, config, org.id);
     if (dealId) await ctx.pool.query(`insert into deal_events (deal_id, type, side, user_id, payload) values ($1,'document_uploaded',$2,$3,$4)`,
       [dealId, (await loadDealFor(ctx, ctx.pool, dealId)).side, ctx.user.id, { document_id: row.id, category, filename }]);
     await ctx.audit('document_uploaded', 'document', row.id, { category, deal_id: dealId, size: buf.length, mime });
@@ -110,6 +121,7 @@ export default function documentRoutes(router, { config }) {
     } else if (!isStaff(ctx)) fail(403, 'Profile evidence is reviewed by Trade Trust Africa reviewers');
     if (!doc.deal_id && doc.owner_org_id === ctx.org?.id) fail(403, 'Reviewers cannot review their own organisation');
     await ctx.pool.query('update documents set review_status=$2, review_note=$3, reviewed_by=$4, reviewed_at=now() where id=$1', [doc.id, decision, note, ctx.user.id]);
+    if (!doc.deal_id && doc.category === 'certificate_of_incorporation') await syncIncorporation(ctx.pool, config, doc.owner_org_id);
     if (doc.deal_id) await ctx.pool.query(`insert into deal_events (deal_id, type, user_id, payload) values ($1,'document_reviewed',$2,$3)`, [doc.deal_id, ctx.user.id, { document_id: doc.id, decision, note }]);
     await ctx.audit('document_reviewed', 'document', doc.id, { decision });
     return { ok: true };

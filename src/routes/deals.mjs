@@ -9,12 +9,13 @@ import { computeSuccessFee } from '../domain/fees.mjs';
 import { trustProfile } from '../domain/rating.mjs';
 import { canonicalJson, sha256 } from '../security.mjs';
 import { agreementPdf } from '../pdf.mjs';
+import { createExecutionSteps } from '../domain/execution.mjs';
 
 const other = (side) => (side === 'buyer' ? 'seller' : 'buyer');
-const event = (c, dealId, stageKey, type, side, userId, revision, payload = {}) =>
+export const event = (c, dealId, stageKey, type, side, userId, revision, payload = {}) =>
   c.query('insert into deal_events (deal_id, stage_key, type, side, user_id, revision, payload) values ($1,$2,$3,$4,$5,$6,$7)',
     [dealId, stageKey, type, side, userId, revision, payload]);
-const touch = (c, dealId) => c.query('update deals set updated_at=now() where id=$1', [dealId]);
+export const touch = (c, dealId) => c.query('update deals set updated_at=now() where id=$1', [dealId]);
 
 const OPEN_FOR_TERMS = ['negotiating', 'terms_agreed'];
 
@@ -37,6 +38,7 @@ async function reopenAgreementIfNeeded(c, deal, changedKey, side, userId) {
     await event(c, deal.id, 'agreement', 'agreement_reopened', side, userId, ag.revision, { reason: `Terms changed in stage: ${changedKey}` });
   }
   if (deal.status === 'terms_agreed') {
+    await c.query('delete from deal_milestones where deal_id=$1', [deal.id]); // execution restarts once terms are re-agreed
     await c.query(`update deals set status='negotiating' where id=$1`, [deal.id]);
     await c.query(`update agreements set superseded_at=now() where deal_id=$1 and superseded_at is null`, [deal.id]);
   }
@@ -53,7 +55,7 @@ async function writeProposal(c, deal, stage, side, userId, proposal, type) {
   return rev;
 }
 
-async function snapshotAgreement(c, deal, userId, side) {
+export async function snapshotAgreement(c, deal, userId, side, paymentDueDays = 30) {
   const stages = await many(c, 'select key, name, revision, proposal, agreed_at from deal_stages where deal_id=$1 order by position', [deal.id]);
   if (stages.some((s) => !s.proposal)) fail(409, 'Every stage needs agreed terms');
   const parties = await many(c, 'select id, name, country, registration_number from organisations where id = any($1)', [[deal.buyer_org_id, deal.seller_org_id]]);
@@ -68,8 +70,24 @@ async function snapshotAgreement(c, deal, userId, side) {
   const hash = sha256(canonicalJson(snapshot));
   await c.query('insert into agreements (deal_id, version, snapshot, sha256) values ($1,$2,$3,$4)', [deal.id, snapshot.version, snapshot, hash]);
   await c.query(`update deals set status='terms_agreed' where id=$1`, [deal.id]);
+  await createExecutionSteps(c, deal.id, paymentDueDays);
   await event(c, deal.id, null, 'terms_agreed', side, userId, snapshot.version, { sha256: hash });
   return { version: snapshot.version, sha256: hash };
+}
+
+/** Marks a deal completed (both parties have confirmed) and records the success fee. */
+export async function finaliseCompletion(c, config, ctx, deal, ag) {
+  await c.query(`update deals set status='completed', completed_at=now(), updated_at=now() where id=$1`, [deal.id]);
+  const pricing = ag.snapshot.stages.find((s) => s.key === 'pricing')?.fields || {};
+  const calc = computeSuccessFee(pricing.total_value, pricing.currency);
+  const status = calc.needsReview ? 'needs_review' : config.pilotWaiveFees ? 'waived_pilot' : 'accrued';
+  const fee = await one(c, `insert into fee_ledger (deal_id, payer_org_id, trade_value, currency, rate, cap_usd, fee_amount, status, note)
+                      values ($1,$2,$3,$4,0.005,750,$5,$6,$7) returning fee_amount, status`,
+  [deal.id, deal.seller_org_id, pricing.total_value || 0, pricing.currency || deal.currency, calc.fee, status,
+    calc.reason || (status === 'waived_pilot' ? 'Pilot: fee recorded but waived' : null)]);
+  await event(c, deal.id, null, 'deal_completed', null, null, ag.version, { fee_status: status });
+  await ctx.audit('deal_completed', 'deal', deal.id, { fee: fee.fee_amount, fee_status: status }, c);
+  return fee;
 }
 
 export async function dealDetail(ctx, q, access) {
@@ -87,6 +105,9 @@ export async function dealDetail(ctx, q, access) {
     completions: await many(q, 'select side, note, agreement_version, confirmed_at from deal_completions where deal_id=$1', [deal.id]),
     disputes: await many(q, 'select id, reason, status, resolution, created_at, resolved_at from deal_disputes where deal_id=$1 order by created_at desc', [deal.id]),
     fee: await one(q, 'select trade_value, currency, rate, cap_usd, fee_amount, status, note from fee_ledger where deal_id=$1', [deal.id]),
+    offers: await many(q, `select o.id, o.seq, o.side, o.terms, o.note, o.status, o.created_at, o.responded_at, u.full_name as user_name from deal_offers o join users u on u.id=o.user_id where o.deal_id=$1 order by o.seq`, [deal.id]),
+    milestones: await many(q, 'select key, position, name, owner_side, status, data, completed_at from deal_milestones where deal_id=$1 order by position', [deal.id]),
+    listing: deal.listing_id ? await one(q, 'select id, title, kind, category, quantity, unit, price_min, price_max, currency, incoterms from listings where id=$1', [deal.listing_id]) : null,
   };
 }
 
@@ -99,7 +120,10 @@ export default function dealRoutes(router, { config }) {
              b.name as buyer_name, s.name as seller_name,
              (select count(*) from deal_stages x where x.deal_id=d.id and x.status='agreed')::int as agreed,
              (select count(*) from deal_stages x where x.deal_id=d.id)::int as total,
-             (select count(*) from deal_stages x where x.deal_id=d.id and x.status='pending' and x.proposed_by_side <> case when d.buyer_org_id=$1 then 'buyer' else 'seller' end)::int as awaiting_me
+             ((select count(*) from deal_stages x where x.deal_id=d.id and x.status='pending' and x.proposed_by_side <> case when d.buyer_org_id=$1 then 'buyer' else 'seller' end)
+              + (select count(*) from deal_offers x where x.deal_id=d.id and x.status='open' and x.side <> case when d.buyer_org_id=$1 then 'buyer' else 'seller' end)
+              + (select count(*) from deal_milestones x where x.deal_id=d.id and x.status='active' and x.owner_side = case when d.buyer_org_id=$1 then 'buyer' else 'seller' end))::int as awaiting_me,
+             (select name from deal_milestones x where x.deal_id=d.id and x.status='active' limit 1) as current_step
         from deals d join organisations b on b.id=d.buyer_org_id join organisations s on s.id=d.seller_org_id
        where d.buyer_org_id=$1 or d.seller_org_id=$1 order by d.updated_at desc`, [org.id]);
   });
@@ -144,6 +168,8 @@ export default function dealRoutes(router, { config }) {
       if (!OPEN_FOR_TERMS.includes(deal.status)) fail(409, `Terms cannot change while the Trade Room is ${deal.status.replace('_', ' ')}`);
       const done = await one(c, 'select 1 from deal_completions where deal_id=$1', [deal.id]);
       if (done) fail(409, 'Completion has been confirmed by a party. Raise a dispute instead of revising terms.');
+      const started = await one(c, `select 1 from deal_milestones where deal_id=$1 and status='done'`, [deal.id]);
+      if (started) fail(409, 'The trade is already being executed. Raise a dispute instead of revising agreed terms.');
       const stage = await loadStage(c, deal.id, ctx.params.key);
       assertRevision(stage, ctx.body);
       if (stage.status === 'pending' && stage.proposed_by_side !== side) fail(409, 'Respond to the other party’s open proposal first (accept, counter or reject).');
@@ -239,20 +265,8 @@ export default function dealRoutes(router, { config }) {
       await event(c, deal.id, null, 'completion_confirmed', side, ctx.user.id, ag.version, { note });
       const both = await one(c, 'select count(*)::int as n from deal_completions where deal_id=$1 and agreement_version=$2', [deal.id, ag.version]);
       let fee = null;
-      if (both.n === 2) {
-        await c.query(`update deals set status='completed', completed_at=now(), updated_at=now() where id=$1`, [deal.id]);
-        const pricing = ag.snapshot.stages.find((s) => s.key === 'pricing')?.fields || {};
-        const calc = computeSuccessFee(pricing.total_value, pricing.currency);
-        const status = calc.needsReview ? 'needs_review' : config.pilotWaiveFees ? 'waived_pilot' : 'accrued';
-        fee = await one(c, `insert into fee_ledger (deal_id, payer_org_id, trade_value, currency, rate, cap_usd, fee_amount, status, note)
-                            values ($1,$2,$3,$4,0.005,750,$5,$6,$7) returning fee_amount, status`,
-        [deal.id, deal.seller_org_id, pricing.total_value || 0, pricing.currency || deal.currency, calc.fee, status,
-          calc.reason || (status === 'waived_pilot' ? 'Pilot: fee recorded but waived' : null)]);
-        await event(c, deal.id, null, 'deal_completed', null, null, ag.version, { fee_status: status });
-        await ctx.audit('deal_completed', 'deal', deal.id, { fee: fee.fee_amount, fee_status: status }, c);
-      } else {
-        await ctx.audit('completion_confirmed', 'deal', deal.id, { side }, c);
-      }
+      if (both.n === 2) fee = await finaliseCompletion(c, config, ctx, deal, ag);
+      else await ctx.audit('completion_confirmed', 'deal', deal.id, { side }, c);
       await touch(c, deal.id);
       return { completed: both.n === 2, fee };
     });
