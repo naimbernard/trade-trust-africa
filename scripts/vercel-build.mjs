@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { createPool } from '../src/db.mjs';
 import { migrate } from '../src/migrate.mjs';
 import { hashPassword, passwordProblem } from '../src/security.mjs';
+import { seedPitch } from './seed-pitch.mjs';
 
 const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 if (!url) {
@@ -29,6 +30,13 @@ if (email && password) {
   const { id, created } = r.rows[0];
   await pool.query(`insert into audit_log (action, entity_type, entity_id, data) values ($1,'user',$2,'{}')`, [created ? 'platform_admin_bootstrapped' : 'platform_admin_password_reset_by_deploy', String(id)]);
   console.log(`Platform admin ${created ? 'created' : 'password reset'}: ${email}. Remove BOOTSTRAP_ADMIN_PASSWORD from Vercel settings once you can sign in.`);
+}
+// Pitch scenario (Bernard Builders, Goevia Builders, Gadre Marine). Accounts use PITCH_PASSWORD,
+// falling back to the admin bootstrap password. Disable with SEED_PITCH=false.
+const pitchPassword = process.env.PITCH_PASSWORD || password;
+if (process.env.SEED_PITCH !== 'false' && pitchPassword) {
+  const n = await seedPitch(pool, pitchPassword);
+  console.log(n ? `${n} pitch profile(s) created` : 'Pitch profiles already present');
 }
 await pool.end();
 

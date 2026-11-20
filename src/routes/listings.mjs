@@ -8,7 +8,7 @@ import { canSell, canBuy, COUNTRIES, CURRENCIES, INCOTERMS, LISTING_CATEGORIES }
 const SELECT = `
   select l.id, l.kind, l.title, l.description, l.category, l.hs_code, l.origin_country, l.destination_country, l.quantity, l.unit,
          l.price_min, l.price_max, l.currency, l.incoterms, l.lead_time_days, l.status, l.is_demo, l.created_at, l.updated_at,
-         o.id as org_id, o.name as org_name, o.country as org_country, o.org_type, o.is_demo as org_demo
+         o.id as org_id, o.name as org_name, o.country as org_country, o.org_type, o.is_demo as org_demo, o.pitch_preview as org_pitch, o.pitch_notice as org_pitch_notice
     from listings l join organisations o on o.id = l.org_id`;
 
 function validateListing(b, partial = false) {
@@ -59,6 +59,7 @@ export default function listingRoutes(router, { config }) {
     const { q = '', kind = '', category = '', country = '', max_price = '', sort = 'relevance' } = ctx.query;
     const page = Math.max(1, Math.min(50, Number(ctx.query.page) || 1));
     const params = []; const where = [`l.status='active'`, `o.status='active'`];
+    if (!ctx.user) where.push('not o.pitch_preview');
     let rank = 'l.created_at';
     if (q.trim()) {
       params.push(q.slice(0, 120));
@@ -79,7 +80,7 @@ export default function listingRoutes(router, { config }) {
     if (!isUuid(ctx.params.id)) fail(404, 'Listing not found');
     const row = await one(ctx.pool, `${SELECT} where l.id=$1`, [ctx.params.id]);
     const mine = row && ctx.org?.id === row.org_id;
-    if (!row || (!mine && row.status !== 'active')) fail(404, 'Listing not found');
+    if (!row || (!mine && row.status !== 'active') || (row.org_pitch && !ctx.user)) fail(404, 'Listing not found');
     const [withT] = await withTrust(ctx, [row]);
     return { ...withT, mine };
   });

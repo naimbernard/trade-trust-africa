@@ -3,8 +3,11 @@ import {
   priceRange, orgTypeLabel, options, countryOptions, canSell, canBuy, canAct, empty, requireAuth, label,
 } from '../core.js';
 
+const pitchPill = (on) => (on ? '<span class="pill pending" title="Illustrative pitch profile. Not affiliated with or operated by this company.">Illustrative profile</span>' : '');
+const pitchNotice = (on, text) => (on ? `<div class="notice warn">${esc(text || 'Illustrative pitch profile prepared by Trade Trust Africa for discussion. Not affiliated with, endorsed by or operated by this company.')}</div>` : '');
+
 const listingCard = (l) => `<article class="card listing">
-  <div class="row">${pill(l.kind === 'offer' ? 'active' : 'pending', l.kind === 'offer' ? 'Supply offer' : 'Buy request')}<span class="pill">${esc(l.category)}</span>${demo(l.is_demo)}</div>
+  <div class="row">${pill(l.kind === 'offer' ? 'active' : 'pending', l.kind === 'offer' ? 'Supply offer' : 'Buy request')}<span class="pill">${esc(l.category)}</span>${demo(l.is_demo)}${pitchPill(l.org_pitch)}</div>
   <h3><a href="#/listing/${l.id}">${esc(l.title)}</a></h3>
   <div class="small muted">${l.origin_country ? `Origin ${esc(country(l.origin_country))}` : ''}${l.destination_country ? `Destination ${esc(country(l.destination_country))}` : ''}${l.quantity ? ` · ${num(l.quantity)} ${esc(l.unit || '')}` : ''}</div>
   <div class="strong">${esc(priceRange(l))}</div>
@@ -35,6 +38,7 @@ export async function listing({ id }) {
   const r = org.trust.rating;
   const iCanTrade = S.me.org && !l.mine && canAct() && ((l.kind === 'offer' && canBuy()) || (l.kind === 'request' && canSell()));
   return `<p class="small"><a href="#/market">← Marketplace</a></p>
+  ${pitchNotice(l.org_pitch, l.org_pitch_notice)}
   <div class="cols"><div class="card stack">
     <div class="row">${pill(l.kind === 'offer' ? 'active' : 'pending', l.kind === 'offer' ? 'Supply offer' : 'Buy request')}<span class="pill">${esc(l.category)}</span>${demo(l.is_demo)}${l.mine ? pill(l.status) : ''}</div>
     <h1>${esc(l.title)}</h1>
@@ -81,7 +85,7 @@ forms.enquiry = async (d, f) => { await post(`/api/listings/${f.dataset.id}/enqu
 export async function orgProfile({ id }) {
   const { organisation: o, trust: t, listings } = await api(`/api/organisations/${id}`);
   return `<p class="small"><a href="#/market">← Marketplace</a></p><div class="cols">
-  <div class="card stack"><div class="row"><h1 data-style="margin:0">${esc(o.name)}</h1>${demo(o.is_demo)}</div>
+  <div class="card stack">${pitchNotice(o.pitch_preview, o.pitch_notice)}<div class="row"><h1 data-style="margin:0">${esc(o.name)}</h1>${demo(o.is_demo)}</div>
     <div class="muted">${esc(orgTypeLabel(o.org_type))} · ${esc(o.city ? `${o.city}, ` : '')}${esc(country(o.country))}</div>
     ${o.website ? `<div class="small"><a href="${esc(o.website)}" rel="noopener noreferrer nofollow" target="_blank">${esc(o.website)}</a></div>` : ''}
     ${o.description ? `<p data-style="white-space:pre-wrap">${esc(o.description)}</p>` : ''}

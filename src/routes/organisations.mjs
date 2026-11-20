@@ -5,7 +5,7 @@ import { trustProfile } from '../domain/rating.mjs';
 import { validateOrgInput } from './auth.mjs';
 import { ORG_TYPES } from '../domain/constants.mjs';
 
-const PUBLIC_FIELDS = 'id, name, org_type, country, city, website, description, sectors, is_demo, created_at';
+const PUBLIC_FIELDS = 'id, name, org_type, country, city, website, description, sectors, is_demo, pitch_preview, pitch_notice, created_at';
 
 export default function orgRoutes(router, { config }) {
   router.add('GET', '/api/organisations/me', async (ctx) => {
@@ -30,6 +30,7 @@ export default function orgRoutes(router, { config }) {
   router.add('GET', '/api/directory', async (ctx) => {
     const { q = '', type = '', country = '' } = ctx.query;
     const params = []; const where = [`status='active'`];
+    if (!ctx.user) where.push('not pitch_preview'); // pitch profiles are never shown to the public
     if (q) { params.push(`%${q.slice(0, 80)}%`); where.push(`(name ilike $${params.length} or description ilike $${params.length} or array_to_string(sectors,' ') ilike $${params.length})`); }
     if (type && ORG_TYPES[type]) { params.push(type); where.push(`org_type=$${params.length}`); }
     if (/^[A-Z]{2}$/.test(country)) { params.push(country); where.push(`country=$${params.length}`); }
@@ -45,7 +46,7 @@ export default function orgRoutes(router, { config }) {
   router.add('GET', '/api/organisations/:id', async (ctx) => {
     if (!isUuid(ctx.params.id)) fail(404, 'Organisation not found');
     const org = await one(ctx.pool, `select ${PUBLIC_FIELDS} from organisations where id=$1 and status='active'`, [ctx.params.id]);
-    if (!org) fail(404, 'Organisation not found');
+    if (!org || (org.pitch_preview && !ctx.user)) fail(404, 'Organisation not found');
     const listings = await many(ctx.pool, `select id, kind, title, category, origin_country, price_min, price_max, currency, quantity, unit from listings where org_id=$1 and status='active' order by created_at desc limit 20`, [org.id]);
     return { organisation: org, trust: await trustProfile(ctx.pool, config, org.id), listings };
   });
