@@ -49,7 +49,7 @@ const P = {
   home: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z', market: 'M4 7h16l-1 12H5zM8 7a4 4 0 0 1 8 0', deals: 'M4 6h16v10H8l-4 4zM8 10h8M8 13h5',
   company: 'M4 21V5l8-3 8 3v16M9 21v-5h6v5M8 9h2M14 9h2M8 13h2M14 13h2', more: 'M5 12h.01M12 12h.01M19 12h.01', shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
   truck: 'M3 6h11v10H3zM14 10h4l3 3v3h-7M7 19a2 2 0 1 0 0-.1M17 19a2 2 0 1 0 0-.1', bank: 'M3 10l9-6 9 6M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18', admin: 'M4 6h16M4 12h16M4 18h10',
-  doc: 'M6 3h9l4 4v14H6zM14 3v5h5', search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
+  doc: 'M6 3h9l4 4v14H6zM14 3v5h5', chat: 'M4 5h16v11H9l-5 4zM8 9h8M8 12h5', search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
 };
 export const icon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${P[k]}"/></svg>`;
 

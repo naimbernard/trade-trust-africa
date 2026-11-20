@@ -128,6 +128,27 @@ export default function dealRoutes(router, { config }) {
        where d.buyer_org_id=$1 or d.seller_org_id=$1 order by d.updated_at desc`, [org.id]);
   });
 
+  // Messages inbox: every Trade Room conversation with its latest message and unread count.
+  router.add('GET', '/api/inbox', async (ctx) => {
+    const org = requireOrg(ctx);
+    return many(ctx.pool, `
+      select d.id, d.ref, d.title, d.status, d.is_demo,
+             case when d.buyer_org_id=$1 then 'buyer' else 'seller' end as my_side,
+             case when d.buyer_org_id=$1 then s.name else b.name end as counterparty,
+             case when d.buyer_org_id=$1 then s.country else b.country end as counterparty_country,
+             lm.body as last_body, lm.at as last_at, lo.name as last_org, (lm.org_id = $1) as last_mine,
+             (select count(*) from deal_messages m where m.deal_id=d.id and m.org_id<>$1
+                and m.at > coalesce((select r.last_read_at from deal_reads r where r.deal_id=d.id and r.user_id=$2), 'epoch'))::int as unread,
+             (select count(*) from deal_offers x where x.deal_id=d.id and x.status='open' and x.side <> case when d.buyer_org_id=$1 then 'buyer' else 'seller' end)::int
+               + (select count(*) from deal_milestones x where x.deal_id=d.id and x.status='active' and x.owner_side = case when d.buyer_org_id=$1 then 'buyer' else 'seller' end)::int as your_turn,
+             greatest(d.updated_at, coalesce(lm.at, d.updated_at)) as activity_at
+        from deals d join organisations b on b.id=d.buyer_org_id join organisations s on s.id=d.seller_org_id
+        left join lateral (select body, at, org_id from deal_messages m where m.deal_id=d.id order by at desc limit 1) lm on true
+        left join organisations lo on lo.id=lm.org_id
+       where d.buyer_org_id=$1 or d.seller_org_id=$1
+       order by activity_at desc limit 200`, [org.id, ctx.user.id]);
+  });
+
   router.add('POST', '/api/deals', async (ctx) => {
     const org = requireOrg(ctx, ACTING_ROLES);
     const plan = await effectivePlan(ctx.pool, config, org.id);
@@ -156,6 +177,7 @@ export default function dealRoutes(router, { config }) {
   router.add('GET', '/api/deals/:id', async (ctx) => {
     const access = await loadDealFor(ctx, ctx.pool, ctx.params.id, { allowStaff: true });
     if (access.staff) await ctx.audit('staff_viewed_deal', 'deal', access.deal.id);
+    else await ctx.pool.query(`insert into deal_reads (deal_id, user_id) values ($1,$2) on conflict (deal_id, user_id) do update set last_read_at=now()`, [access.deal.id, ctx.user.id]);
     return dealDetail(ctx, ctx.pool, access);
   });
 

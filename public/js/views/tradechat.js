@@ -42,7 +42,7 @@ function tracker() {
 /** The single most important thing on the page: whose turn it is and what to do. */
 function nextStep() {
   const me = D.mySide; const them = other(me);
-  if (D.readOnly) return banner('wait', 'Staff view', 'You are viewing this Trade Room read-only.');
+  if (D.readOnly) return banner('wait', 'Staff view: read only', 'You are signed in as Trade Trust Africa staff. To chat, make offers or complete steps, sign out and sign in as the buyer or the seller of this Trade Room.');
   if (D.deal.status === 'completed') {
     const pay = D.milestones.find((m) => m.key === 'payment_received');
     return banner('done', 'Trade completed', `Goods delivered and payment received${pay?.data?.on_time === false ? ' (late)' : pay?.data?.on_time ? ' on time' : ''}. This trade now counts in both companies' history.`);

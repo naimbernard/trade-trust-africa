@@ -2,7 +2,7 @@
 // This is a presentation gate for a private demo, not account security: the password is shared with viewers.
 
 export const GATE_COOKIE = 'tta_gate';
-export const GATE_PUBLIC_PATHS = new Set(['/__gate', '/gate.css', '/icon.svg']);
+export const GATE_PUBLIC_PATHS = new Set(['/__gate', '/gate.css', '/icon.svg', '/api/version']);
 
 export async function gateToken(password) {
   const data = new TextEncoder().encode(`tta-demo-gate:${password}`);

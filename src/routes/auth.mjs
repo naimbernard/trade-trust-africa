@@ -30,7 +30,10 @@ async function mePayload(ctx) {
     select o.id, o.name, o.org_type, o.status, m.role from memberships m join organisations o on o.id=m.org_id
      where m.user_id=$1 order by m.created_at`, [ctx.user.id]);
   const plan = ctx.org ? await effectivePlan(ctx.pool, ctx.config, ctx.org.id) : null;
-  return { user: ctx.user, org: ctx.org, memberships, plan, csrf: ctx.csrf };
+  const unread = ctx.org ? (await one(ctx.pool, `select count(*)::int as n from deal_messages m join deals d on d.id=m.deal_id
+      where (d.buyer_org_id=$1 or d.seller_org_id=$1) and m.org_id<>$1
+        and m.at > coalesce((select r.last_read_at from deal_reads r where r.deal_id=d.id and r.user_id=$2), 'epoch')`, [ctx.org.id, ctx.user.id])).n : 0;
+  return { user: ctx.user, org: ctx.org, memberships, plan, csrf: ctx.csrf, unreadMessages: unread };
 }
 
 export default function authRoutes(router, { config }) {

@@ -1,5 +1,5 @@
 import {
-  S, esc, api, post, forms, actions, go, toast, openModal, closeModal, rerender, country, money, dt, day, pill, demo, trustBadge,
+  S, esc, api, post, loadMe, forms, actions, go, toast, openModal, closeModal, rerender, country, money, dt, day, pill, demo, trustBadge,
   options, empty, requireAuth, label, cap, payLabel, canAct, isAfcfta, afcftaPill, afcftaNotice, AFCFTA_NOTE,
 } from '../core.js';
 
@@ -21,7 +21,7 @@ export async function dealsList() {
     : empty('No Trade Rooms yet. Open one from a marketplace listing.')}`;
 }
 
-const TABS = [['chat', 'Deal chat'], ['terms', 'Detailed terms'], ['messages', 'Messages'], ['documents', 'Documents'], ['logistics', 'Logistics'], ['finance', 'Finance'], ['activity', 'Activity']];
+const TABS = [['chat', '💬 Chat'], ['terms', 'Detailed terms'], ['messages', 'Messages'], ['documents', 'Documents'], ['logistics', 'Logistics'], ['finance', 'Finance'], ['activity', 'Activity']];
 const openForTerms = (d) => ['negotiating', 'terms_agreed'].includes(d.deal.status) && !d.completions.length;
 
 export async function deal({ id }) {
@@ -30,6 +30,7 @@ export async function deal({ id }) {
   const tab = TABS.some(([k]) => k === q.get('tab')) ? q.get('tab') : 'chat';
   const d = await api(`/api/deals/${id}`);
   current = d;
+  if (!d.readOnly) await loadMe().catch(() => {}); // opening the room marks messages read
   const agreed = d.stages.filter((s) => s.status === 'agreed').length;
   const pct = Math.round((100 * agreed) / d.stages.length);
   const cp = d.mySide === 'buyer' ? d.seller : d.buyer;

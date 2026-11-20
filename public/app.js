@@ -7,6 +7,7 @@ import { company, billing } from './js/views/company.js';
 import { logisticsConsole, financeConsole, reviewQueue } from './js/views/providers.js';
 import { admin } from './js/views/admin.js';
 import { dashboard } from './js/views/dashboard.js';
+import { messages } from './js/views/messages.js';
 
 const app = document.querySelector('#app');
 
@@ -14,7 +15,7 @@ const ROUTES = [
   [/^\/?$/, landing], [/^\/login$/, login], [/^\/register$/, register], [/^\/invite\/([\w-]+)$/, invite, ['token']], [/^\/partners$/, partners],
   [/^\/market$/, market], [/^\/listing\/([\w-]+)$/, listing, ['id']], [/^\/org\/([\w-]+)$/, orgProfile, ['id']],
   [/^\/dashboard$/, dashboard], [/^\/listings$/, myListings], [/^\/listings\/new$/, listingEditor], [/^\/listings\/([\w-]+)\/edit$/, listingEditor, ['id']],
-  [/^\/enquiries$/, enquiries], [/^\/deals$/, dealsList], [/^\/deal\/([\w-]+)$/, deal, ['id']],
+  [/^\/enquiries$/, enquiries], [/^\/messages$/, messages], [/^\/deals$/, dealsList], [/^\/deal\/([\w-]+)$/, deal, ['id']],
   [/^\/company$/, company], [/^\/billing$/, billing], [/^\/logistics$/, logisticsConsole], [/^\/finance$/, financeConsole],
   [/^\/review$/, reviewQueue], [/^\/admin$/, admin],
 ];
@@ -23,7 +24,8 @@ function navItems() {
   const u = S.me.user; const t = S.me.org?.type;
   if (!u) return [['#/', 'Home', 'home'], ['#/market', 'Marketplace', 'market'], ['#/partners', 'Partners', 'company'], ['#/login', 'Sign in', 'shield']];
   const items = [['#/dashboard', 'Dashboard', 'home'], ['#/market', 'Marketplace', 'market']];
-  if (S.me.org && !['logistics', 'finance', 'verification'].includes(t)) items.push(['#/deals', 'Trade Rooms', 'deals'], ['#/listings', 'Listings', 'doc'], ['#/enquiries', 'Enquiries', 'search']);
+  const unread = S.me.unreadMessages ? ` (${S.me.unreadMessages})` : '';
+  if (S.me.org && !['logistics', 'finance', 'verification'].includes(t)) items.push(['#/messages', `Messages${unread}`, 'chat'], ['#/deals', 'Trade Rooms', 'deals'], ['#/listings', 'Listings', 'doc'], ['#/enquiries', 'Enquiries', 'search']);
   if (t === 'logistics') items.push(['#/logistics', 'Freight', 'truck']);
   if (t === 'finance') items.push(['#/finance', 'Finance', 'bank']);
   if (S.me.org) items.push(['#/company', 'Company', 'company'], ['#/billing', 'Billing', 'doc']);
@@ -110,6 +112,17 @@ document.addEventListener('change', async (e) => {
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
 window.addEventListener('tta:render', () => render());
+
+// Keep conversations live: refresh the chat and inbox every 8 seconds unless the user is typing or a dialog is open.
+setInterval(async () => {
+  const h = location.hash;
+  const live = (h.startsWith('#/deal/') && (!h.includes('tab=') || h.includes('tab=chat'))) || h.startsWith('#/messages');
+  if (!live || document.hidden || document.querySelector('.modal')) return;
+  const a = document.activeElement;
+  if (a && ['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName) && a.value) return;
+  try { await loadMe(); } catch { return; }
+  render();
+}, 8000);
 
 (async () => {
   try { await Promise.all([loadMe(), loadMeta()]); await render(); } catch (e) {

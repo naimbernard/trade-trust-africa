@@ -11,6 +11,12 @@ export default function publicRoutes(router, { pool, config }) {
     return { ok: true, time: new Date().toISOString() };
   });
 
+  // Public (also through the demo gate) so anyone can check which commit is live.
+  router.add('GET', '/api/version', async () => ({
+    commit: (process.env.VERCEL_GIT_COMMIT_SHA || 'local').slice(0, 7),
+    message: process.env.VERCEL_GIT_COMMIT_MESSAGE?.split('\n')[0] || null,
+  }));
+
   router.add('GET', '/api/meta', async () => ({
     orgTypes: ORG_TYPES, paymentMethods: PAYMENT_METHODS, incoterms: INCOTERMS, currencies: CURRENCIES, stages: STAGES,
     verificationChecks: VERIFICATION_CHECKS, documentCategories: DOCUMENT_CATEGORIES, financeProducts: FINANCE_PRODUCTS,
