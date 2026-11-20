@@ -61,7 +61,7 @@ let toastTimer;
 export function toast(msg, isErr = false) {
   document.querySelector('.toast')?.remove();
   const el = document.createElement('div'); el.className = `toast${isErr ? ' err' : ''}`; el.setAttribute('role', 'status'); el.textContent = msg;
-  document.body.appendChild(el); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.remove(), 4200);
+  document.body.appendChild(el); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.remove(), 3200);
 }
 export function openModal(html) {
   closeModal();
@@ -77,6 +77,8 @@ export function closeModal() { document.querySelector('.modal')?.remove(); }
 /** CSP forbids inline style attributes, so presentational styles are carried in data-style and applied via the CSSOM. */
 export function applyStyles(root = document) {
   root.querySelectorAll('[data-style]').forEach((el) => { el.style.cssText = el.dataset.style; });
+  // Phone keyboards: numeric pad for number fields.
+  root.querySelectorAll('input[type=number]:not([inputmode])').forEach((el) => { el.inputMode = 'decimal'; });
 }
 
 // ---------- action + form registries (event delegation) ----------

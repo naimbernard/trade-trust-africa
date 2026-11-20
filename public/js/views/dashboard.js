@@ -26,9 +26,9 @@ async function traderHome() {
   ].filter(Boolean);
   return `<div class="title-row"><div><h1>Welcome, ${esc(S.me.user.fullName.split(' ')[0])}</h1><p class="small muted">${esc(S.me.org.name)} ${demo(S.me.org.isDemo)} · ${esc(plan?.name || '')} plan${plan?.pilotUnlocked ? ' (Business features unlocked for the pilot)' : ''}</p></div>
     <div class="row"><a class="btn ghost" href="#/market">Marketplace</a>${canSell() || canBuy() ? '<a class="btn gold" href="#/listings/new">New listing</a>' : ''}</div></div>
-  <div class="grid g4" data-style="margin-bottom:16px">
+  <div class="grid g4 stats" data-style="margin-bottom:16px">
     <a class="card" href="#/deals" data-style="color:inherit;text-decoration:none"><div class="small muted">Trade Rooms</div><div class="stat">${deals.length}</div><div class="micro muted">${deals.filter((d) => d.status === 'negotiating').length} negotiating</div></a>
-    <a class="card" href="#/deals" data-style="color:inherit;text-decoration:none"><div class="small muted">Awaiting your decision</div><div class="stat" data-style="color:${awaiting.length ? 'var(--gold)' : 'var(--navy)'}">${awaiting.reduce((n, d) => n + d.awaiting_me, 0)}</div><div class="micro muted">stage proposals</div></a>
+    <a class="card" href="#/deals" data-style="color:inherit;text-decoration:none"><div class="small muted">Your turn</div><div class="stat" data-style="color:${awaiting.length ? 'var(--gold)' : 'var(--navy)'}">${awaiting.length}</div><div class="micro muted">trades waiting for you</div></a>
     <a class="card" href="#/enquiries" data-style="color:inherit;text-decoration:none"><div class="small muted">Enquiries received</div><div class="stat">${enq.received.length}</div><div class="micro muted">${enq.received.filter((e) => e.status === 'open').length} unanswered</div></a>
     <a class="card" href="#/company?tab=verification" data-style="color:inherit;text-decoration:none"><div class="small muted">Trade-Ready indicator</div><div class="stat">${r.score}<span class="small muted">/100</span></div><div class="micro muted">${esc(r.band)} · ${esc(me.trust.verification.label)}</div></a>
   </div>
@@ -46,7 +46,7 @@ async function providerHome(kind) {
   const data = kind === 'logistics' ? await api('/api/logistics/requests') : await api('/api/finance/requests');
   const ships = kind === 'logistics' ? await api('/api/logistics/shipments') : [];
   return `<h1>Welcome, ${esc(S.me.user.fullName.split(' ')[0])}</h1><p class="small muted">${esc(S.me.org.name)} ${demo(S.me.org.isDemo)}</p>
-  <div class="grid g3" data-style="margin-bottom:16px">
+  <div class="grid g3 stats" data-style="margin-bottom:16px">
     <a class="card" href="#/${kind}" data-style="color:inherit;text-decoration:none"><div class="small muted">${kind === 'logistics' ? 'Open quote requests' : 'Introduction requests'}</div><div class="stat">${data.filter((x) => !x.my_quote_status && !x.my_decision).length}</div><div class="micro muted">awaiting your response</div></a>
     ${kind === 'logistics' ? `<a class="card" href="#/logistics" data-style="color:inherit;text-decoration:none"><div class="small muted">Active shipments</div><div class="stat">${ships.filter((s) => s.status !== 'delivered').length}</div></a>
       <div class="card"><div class="small muted">Quoted value</div><div class="stat">${money(data.filter((x) => x.my_price && x.my_currency === 'USD').reduce((n, x) => n + Number(x.my_price), 0))}</div><div class="micro muted">USD quotes outstanding</div></div>` : ''}

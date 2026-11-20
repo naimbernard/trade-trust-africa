@@ -107,7 +107,7 @@ export async function billing() {
   const ent = b.plan.entitlements;
   return `<h1>Plan &amp; billing</h1>
   <div class="notice warn" data-style="margin-bottom:14px">Billing is simulated. No card details are collected and no payments are taken until a payment provider is contracted and integrated.${b.pilot.freeAccess ? ' During the pilot, Business features are unlocked for all organisations.' : ''}</div>
-  <div class="grid g3" data-style="margin-bottom:16px">
+  <div class="grid g3 stats" data-style="margin-bottom:16px">
     <div class="card"><div class="small muted">Current plan</div><div class="stat">${esc(b.plan.name)}</div><div class="small">${b.plan.pilotUnlocked ? 'Business features unlocked for the pilot' : esc(b.subscription?.status || '')}</div></div>
     <div class="card"><div class="small muted">Enquiries this month</div><div class="stat">${b.usage.enquiries_this_month}${ent.enquiries_per_month ? `<span class="small muted">/${ent.enquiries_per_month}</span>` : ''}</div></div>
     <div class="card"><div class="small muted">Active listings</div><div class="stat">${b.usage.active_listings}${ent.active_listings ? `<span class="small muted">/${ent.active_listings}</span>` : ''}</div></div>

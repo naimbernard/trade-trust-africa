@@ -1,5 +1,5 @@
 // Trade Trust Africa single page app. Hash routing, server-rendered data via the authenticated JSON API.
-import { S, esc, loadMe, loadMeta, post, actions, forms, formData, toast, closeModal, go, icon, isStaff, demo, applyStyles } from './js/core.js';
+import { S, esc, loadMe, loadMeta, post, actions, forms, formData, toast, closeModal, openModal, go, icon, isStaff, demo, applyStyles } from './js/core.js';
 import { landing, login, register, invite, partners } from './js/views/public.js';
 import { market, listing, orgProfile, myListings, listingEditor, enquiries } from './js/views/market.js';
 import { dealsList, deal } from './js/views/deals.js';
@@ -34,28 +34,45 @@ function navItems() {
   return items;
 }
 
+// Phone bottom bar: the 4 most used places for this role, plus "More" for everything else.
+function primaryMobile(items) {
+  const t = S.me.org?.type;
+  const want = !S.me.user ? ['#/', '#/market', '#/partners', '#/login']
+    : t === 'logistics' ? ['#/dashboard', '#/market', '#/logistics', '#/company']
+      : t === 'finance' ? ['#/dashboard', '#/market', '#/finance', '#/company']
+        : !S.me.org ? ['#/dashboard', '#/market', '#/review', '#/admin']
+          : ['#/dashboard', '#/market', '#/messages', '#/deals'];
+  return want.map((h) => items.find(([x]) => x === h)).filter(Boolean);
+}
+
 function shell(content) {
   const path = location.hash.slice(1).split('?')[0] || '/';
   const items = navItems();
   const active = (h) => path === h.slice(1) || (h !== '#/' && path.startsWith(h.slice(1)));
-  const mobile = items.filter(([h]) => !['#/listings', '#/enquiries', '#/billing', '#/review'].includes(h)).slice(0, 5);
+  const mobile = primaryMobile(items);
+  const more = items.filter((i) => !mobile.includes(i));
+  const moreActive = more.some(([h]) => active(h));
+  const unread = S.me.unreadMessages || 0;
+  const label = (h, t) => (h === '#/messages' ? 'Messages' : t);
   const orgSwitch = S.me.memberships?.length > 1
     ? `<select id="org-switch" aria-label="Switch organisation">${S.me.memberships.map((m) => `<option value="${m.id}" ${m.id === S.me.org?.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>` : '';
+  const demoMode = S.meta?.flags?.demoMode;
   return `<header class="top"><div class="top-in">
       <a class="logo" href="#/">TRADE <b>TRUST</b> AFRICA</a>
       <nav aria-label="Main">${items.map(([h, t]) => `<a href="${h}" class="${active(h) ? 'on' : ''}">${t}</a>`).join('')}</nav>
       <span class="spacer"></span>
-      ${S.me.user ? `<div class="who">${orgSwitch}<span class="chip-org">${esc(S.me.org?.name || S.me.user.fullName)} ${demo(S.me.org?.isDemo || S.me.user.isDemo)}</span><button class="btn sm ghost" data-action="logout">Sign out</button></div>`
+      ${S.me.user ? `<div class="who">${orgSwitch}<span class="chip-org">${esc(S.me.org?.name || S.me.user.fullName)} ${demo(S.me.org?.isDemo || S.me.user.isDemo)}</span><button class="btn sm ghost desk-only" data-action="logout">Sign out</button></div>`
     : '<div class="who"><a class="btn sm ghost hide-sm" href="#/login" data-style="background:transparent;color:#fff;border-color:#ffffff55">Sign in</a><a class="btn sm gold" href="#/register">Register</a></div>'}
     </div></header>
     <main class="page" id="main">
-      ${S.meta?.flags?.demoMode
-        ? `<div class="pilot demo" role="note"><strong>This is a demo brought to you by ${esc(S.meta.flags.demoBrand)}.</strong> All companies, scores, verifications and data are used for demonstration purposes only. No payments are processed.</div>`
-        : '<div class="pilot" role="note"><strong>Pilot platform.</strong> No payments are processed and no funds are held. Verification labels show only the checks completed. Records marked DEMO are fictional.</div>'}
+      ${demoMode
+        ? `<div class="pilot demo" role="note"><strong>Demo by ${esc(S.meta.flags.demoBrand)}.</strong> <span class="long">All companies, scores, verifications and data are used for demonstration purposes only. No payments are processed.</span><span class="short">Demonstration data only.</span></div>`
+        : '<div class="pilot" role="note"><strong>Pilot platform.</strong> <span class="long">No payments are processed and no funds are held. Verification labels show only the checks completed. Records marked DEMO are fictional.</span><span class="short">No payments processed.</span></div>'}
       ${content}
-      <footer class="footer">Trade Trust Africa · Connecting global commerce. Building African industry.${S.meta?.flags?.demoMode ? ` · Demo by ${esc(S.meta.flags.demoBrand)}. Demonstration data only.` : ' · Pilot software: legal review required before relying on agreements.'}</footer>
+      <footer class="footer">Trade Trust Africa · Connecting global commerce. Building African industry.${demoMode ? ` · Demo by ${esc(S.meta.flags.demoBrand)}. Demonstration data only.` : ' · Pilot software: legal review required before relying on agreements.'}</footer>
     </main>
-    <nav class="bottom" aria-label="Quick">${mobile.map(([h, t, ic]) => `<a href="${h}" class="${active(h) ? 'on' : ''}">${icon(ic)}<span>${t}</span></a>`).join('')}</nav>`;
+    <nav class="bottom" aria-label="Quick">${mobile.map(([h, t, ic]) => `<a href="${h}" class="${active(h) ? 'on' : ''}"><span class="ic">${icon(ic)}${h === '#/messages' && unread ? `<b class="dot">${unread > 9 ? '9+' : unread}</b>` : ''}</span><span>${esc(label(h, t))}</span></a>`).join('')}
+      ${S.me.user ? `<a href="#" data-action="more" class="${moreActive ? 'on' : ''}"><span class="ic">${icon('more')}</span><span>More</span></a>` : ''}</nav>`;
 }
 
 let renderSeq = 0;
@@ -81,11 +98,21 @@ async function render() {
   app.innerHTML = shell(html ?? '');
   applyStyles(app);
   const log = document.getElementById('chat-log'); if (log) log.scrollTop = log.scrollHeight;
+  const flow = document.querySelector('.flow'); const cur = flow?.querySelector('.flow-step.active');
+  if (flow && cur) flow.scrollLeft = cur.offsetLeft - flow.clientWidth / 2 + cur.clientWidth / 2;
   document.title = `Trade Trust Africa${path !== '/' ? ` · ${path.split('/')[1]}` : ''}`;
 }
 
 // ---------- global delegation ----------
 actions.close = () => closeModal();
+actions.more = () => {
+  const items = navItems(); const mobile = primaryMobile(items);
+  const rest = items.filter((i) => !mobile.includes(i));
+  openModal(`<div class="sheet-head"><div><div class="strong">${esc(S.me.org?.name || S.me.user.fullName)}</div><div class="micro muted">${esc(S.me.user.email)}</div></div><button class="btn sm ghost" data-action="close">Close</button></div>
+    ${S.me.memberships?.length > 1 ? `<select id="org-switch" class="sheet-select" aria-label="Switch organisation">${S.me.memberships.map((m) => `<option value="${m.id}" ${m.id === S.me.org?.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>` : ''}
+    <nav class="sheet-nav">${rest.map(([h, t, ic]) => `<a href="${h}">${icon(ic)}<span>${esc(t)}</span></a>`).join('')}</nav>
+    <button class="btn ghost block" data-action="logout">Sign out</button>`);
+};
 actions.logout = async () => { await post('/api/auth/logout'); S.me = { user: null }; toast('Signed out'); go('#/'); };
 
 document.addEventListener('click', async (e) => {

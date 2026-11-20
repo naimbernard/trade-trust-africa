@@ -2,7 +2,7 @@
 // This is a presentation gate for a private demo, not account security: the password is shared with viewers.
 
 export const GATE_COOKIE = 'tta_gate';
-export const GATE_PUBLIC_PATHS = new Set(['/__gate', '/gate.css', '/icon.svg', '/api/version']);
+export const GATE_PUBLIC_PATHS = new Set(['/__gate', '/gate.css', '/icon.svg', '/api/version', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png']);
 
 export async function gateToken(password) {
   const data = new TextEncoder().encode(`tta-demo-gate:${password}`);
@@ -31,7 +31,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 export function gatePage({ brand = 'Mavorra Creative', error = false } = {}) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow"><title>Trade Trust Africa · Private demo</title>
-<link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/gate.css"></head>
+<link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#0b2a3c"><link rel="stylesheet" href="/gate.css"></head>
 <body><main class="gate"><div class="gate-card">
 <div class="gate-logo">TRADE <b>TRUST</b> AFRICA</div>
 <p class="gate-eyebrow">Private demo</p>

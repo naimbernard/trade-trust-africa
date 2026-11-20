@@ -22,7 +22,7 @@ async function overview() {
   const t = o.totals;
   const stat = (n, l, href) => `<a class="card" href="${href || '#'}" data-style="color:inherit;text-decoration:none"><div class="small muted">${l}</div><div class="stat">${n}</div></a>`;
   const signups = o.signups30d; const maxS = Math.max(1, ...signups.map((s) => s.n));
-  return `<div class="grid g4">${stat(t.organisations, 'Organisations', '#/admin?tab=organisations')}${stat(t.users, 'Users', '#/admin?tab=users')}${stat(t.active_listings, 'Active listings')}${stat(t.deals, 'Trade Rooms', '#/admin?tab=deals')}
+  return `<div class="grid g4 stats">${stat(t.organisations, 'Organisations', '#/admin?tab=organisations')}${stat(t.users, 'Users', '#/admin?tab=users')}${stat(t.active_listings, 'Active listings')}${stat(t.deals, 'Trade Rooms', '#/admin?tab=deals')}
     ${stat(t.completed_deals, 'Completed trades')}${stat(t.verification_queue, 'Checks awaiting review', '#/review')}${stat(t.open_disputes, 'Open disputes', '#/admin?tab=disputes')}${stat(t.new_partnerships, 'New partner enquiries', '#/admin?tab=partnerships')}</div>
   ${t.demo_organisations ? `<p class="micro muted" data-style="margin-top:8px">${t.demo_organisations} organisations are labelled DEMO. Demo trades are excluded from value and fee metrics.</p>` : ''}
   <div class="grid g2" data-style="margin-top:16px">

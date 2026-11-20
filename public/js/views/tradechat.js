@@ -166,9 +166,9 @@ export async function chatTab(d) {
   return `${tracker()}${nextStep()}
   <div class="cols"><section class="card chat" aria-label="Deal chat">
     <div class="chat-log" id="chat-log">${timeline()}</div>
-    ${can ? `<div class="chips" aria-label="Quick messages">${presets.map((p) => `<button class="chip" data-action="preset" data-text="${esc(p)}">${esc(p)}</button>`).join('')}</div>
-    <form class="composer" data-form="chat-send"><input name="text" maxlength="2000" placeholder="Type a message…" aria-label="Message" required><button class="btn">Send</button></form>
-    ${d.deal.status === 'negotiating' ? `<button class="btn gold block" data-action="offer-new">${d.mySide === 'buyer' ? 'Negotiate price' : 'Make an offer'}</button>` : ''}` : ''}
+    ${can ? `<div class="chat-actions"><div class="chips" aria-label="Quick messages">${presets.map((p) => `<button class="chip" data-action="preset" data-text="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+    <form class="composer" data-form="chat-send"><input name="text" maxlength="2000" placeholder="Type a message…" aria-label="Message" autocomplete="off" enterkeyhint="send" required><button class="btn">Send</button></form>
+    ${d.deal.status === 'negotiating' ? `<button class="btn gold block" data-action="offer-new">${d.mySide === 'buyer' ? 'Negotiate price' : 'Make an offer'}</button>` : ''}</div>` : ''}
   </section>
   <aside class="stack">${await historyAside(d)}</aside></div>`;
 }
