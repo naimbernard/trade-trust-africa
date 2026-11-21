@@ -90,24 +90,39 @@ export async function finaliseCompletion(c, config, ctx, deal, ag) {
   return fee;
 }
 
+const MSG_SELECT = `select m.id, m.body, m.at, m.user_id, u.full_name as user_name, o.name as org_name, case when o.id=$2 then 'buyer' else 'seller' end as side
+                      from deal_messages m join users u on u.id=m.user_id join organisations o on o.id=m.org_id`;
+
+/** Cheap fingerprint of everything except chat messages. When it changes the client reloads the full room. */
+export async function dealStateKey(q, deal) {
+  const r = await one(q, 'select d.status, coalesce((select max(id) from deal_events e where e.deal_id=d.id),0) as ev from deals d where d.id=$1', [deal.id]);
+  return `${r.status}:${r.ev}`;
+}
+
 export async function dealDetail(ctx, q, access) {
   const { deal } = access;
-  const stages = await many(q, 'select key, position, name, status, revision, proposal, proposed_by_side, proposed_at, buyer_approved_revision, seller_approved_revision, agreed_at from deal_stages where deal_id=$1 order by position', [deal.id]);
-  const orgs = await many(q, 'select id, name, org_type, country, is_demo from organisations where id = any($1)', [[deal.buyer_org_id, deal.seller_org_id]]);
-  const party = async (id) => ({ ...orgs.find((o) => o.id === id), trust: await trustProfile(q, ctx.config, id) });
+  // Independent queries run in parallel (they queue on the pool, which is still far faster than one after another).
+  const [stages, orgs, events, messages, agreements, completions, disputes, fee, offers, milestones, listing, stateKey] = await Promise.all([
+    many(q, 'select key, position, name, status, revision, proposal, proposed_by_side, proposed_at, buyer_approved_revision, seller_approved_revision, agreed_at from deal_stages where deal_id=$1 order by position', [deal.id]),
+    many(q, 'select id, name, org_type, country, is_demo from organisations where id = any($1)', [[deal.buyer_org_id, deal.seller_org_id]]),
+    many(q, `select e.id, e.stage_key, e.type, e.side, e.revision, e.payload, e.at, u.full_name as user_name from deal_events e left join users u on u.id=e.user_id where e.deal_id=$1 order by e.id desc limit 300`, [deal.id]),
+    many(q, `${MSG_SELECT} where m.deal_id=$1 order by m.at desc limit 200`, [deal.id, deal.buyer_org_id]),
+    many(q, 'select version, sha256, created_at, superseded_at from agreements where deal_id=$1 order by version desc', [deal.id]),
+    many(q, 'select side, note, agreement_version, confirmed_at from deal_completions where deal_id=$1', [deal.id]),
+    many(q, 'select id, reason, status, resolution, created_at, resolved_at from deal_disputes where deal_id=$1 order by created_at desc', [deal.id]),
+    one(q, 'select trade_value, currency, rate, cap_usd, fee_amount, status, note from fee_ledger where deal_id=$1', [deal.id]),
+    many(q, `select o.id, o.seq, o.side, o.terms, o.note, o.status, o.created_at, o.responded_at, u.full_name as user_name from deal_offers o join users u on u.id=o.user_id where o.deal_id=$1 order by o.seq`, [deal.id]),
+    many(q, 'select key, position, name, owner_side, status, data, completed_at from deal_milestones where deal_id=$1 order by position', [deal.id]),
+    deal.listing_id ? one(q, 'select id, title, kind, category, quantity, unit, price_min, price_max, currency, incoterms from listings where id=$1', [deal.listing_id]) : null,
+    dealStateKey(q, deal),
+  ]);
+  const [buyerTrust, sellerTrust] = await Promise.all([trustProfile(q, ctx.config, deal.buyer_org_id), trustProfile(q, ctx.config, deal.seller_org_id)]);
+  const party = (id, trust) => ({ ...orgs.find((o) => o.id === id), trust });
   return {
-    deal, mySide: access.side, readOnly: !access.side,
-    buyer: await party(deal.buyer_org_id), seller: await party(deal.seller_org_id),
+    deal, mySide: access.side, readOnly: !access.side, stateKey,
+    buyer: party(deal.buyer_org_id, buyerTrust), seller: party(deal.seller_org_id, sellerTrust),
     stages: stages.map((s) => ({ ...s, spec: STAGES.find((x) => x.key === s.key) })),
-    events: await many(q, `select e.id, e.stage_key, e.type, e.side, e.revision, e.payload, e.at, u.full_name as user_name from deal_events e left join users u on u.id=e.user_id where e.deal_id=$1 order by e.id desc limit 300`, [deal.id]),
-    messages: await many(q, `select m.id, m.body, m.at, u.full_name as user_name, o.name as org_name, case when o.id=$2 then 'buyer' else 'seller' end as side from deal_messages m join users u on u.id=m.user_id join organisations o on o.id=m.org_id where m.deal_id=$1 order by m.at desc limit 200`, [deal.id, deal.buyer_org_id]),
-    agreements: await many(q, 'select version, sha256, created_at, superseded_at from agreements where deal_id=$1 order by version desc', [deal.id]),
-    completions: await many(q, 'select side, note, agreement_version, confirmed_at from deal_completions where deal_id=$1', [deal.id]),
-    disputes: await many(q, 'select id, reason, status, resolution, created_at, resolved_at from deal_disputes where deal_id=$1 order by created_at desc', [deal.id]),
-    fee: await one(q, 'select trade_value, currency, rate, cap_usd, fee_amount, status, note from fee_ledger where deal_id=$1', [deal.id]),
-    offers: await many(q, `select o.id, o.seq, o.side, o.terms, o.note, o.status, o.created_at, o.responded_at, u.full_name as user_name from deal_offers o join users u on u.id=o.user_id where o.deal_id=$1 order by o.seq`, [deal.id]),
-    milestones: await many(q, 'select key, position, name, owner_side, status, data, completed_at from deal_milestones where deal_id=$1 order by position', [deal.id]),
-    listing: deal.listing_id ? await one(q, 'select id, title, kind, category, quantity, unit, price_min, price_max, currency, incoterms from listings where id=$1', [deal.listing_id]) : null,
+    events, messages, agreements, completions, disputes, fee, offers, milestones, listing,
   };
 }
 
@@ -264,10 +279,31 @@ export default function dealRoutes(router, { config }) {
     const access = await loadDealFor(ctx, ctx.pool, ctx.params.id);
     requireActingSide(ctx, access);
     const body = v.str(ctx.body.text ?? ctx.body.body, 'Message', { max: 2000 });
-    const row = await one(ctx.pool, 'insert into deal_messages (deal_id, org_id, user_id, body) values ($1,$2,$3,$4) returning id, at', [access.deal.id, ctx.org.id, ctx.user.id, body]);
+    // The same message from the same person within 10 seconds is a double tap: return the original instead of a copy.
+    // A short per-user lock makes this hold even when identical taps arrive at the same instant.
+    const result = await tx(ctx.pool, async (c) => {
+      await c.query('select pg_advisory_xact_lock(hashtext($1))', [`msg:${access.deal.id}:${ctx.user.id}`]);
+      const dup = await one(c, `select id, at from deal_messages where deal_id=$1 and user_id=$2 and body=$3 and at > now() - interval '10 seconds' order by at desc limit 1`, [access.deal.id, ctx.user.id, body]);
+      if (dup) return { ...dup, duplicate: true };
+      return one(c, 'insert into deal_messages (deal_id, org_id, user_id, body) values ($1,$2,$3,$4) returning id, at', [access.deal.id, ctx.org.id, ctx.user.id, body]);
+    });
+    if (result.duplicate) return result;
+    const row = result;
     await touch(ctx.pool, access.deal.id);
     ctx.status = 201;
     return row;
+  });
+
+  // Lightweight live updates for the chat: new messages since a time, plus a state key that changes when anything else changes.
+  router.add('GET', '/api/deals/:id/live', async (ctx) => {
+    const access = await loadDealFor(ctx, ctx.pool, ctx.params.id, { allowStaff: true });
+    const after = Date.parse(ctx.query.after || '') ? new Date(ctx.query.after) : new Date(0);
+    const [messages, stateKey] = await Promise.all([
+      many(ctx.pool, `${MSG_SELECT} where m.deal_id=$1 and m.at > $3 order by m.at asc limit 100`, [access.deal.id, access.deal.buyer_org_id, after]),
+      dealStateKey(ctx.pool, access.deal),
+    ]);
+    if (access.side) await ctx.pool.query(`insert into deal_reads (deal_id, user_id) values ($1,$2) on conflict (deal_id, user_id) do update set last_read_at=now()`, [access.deal.id, ctx.user.id]);
+    return { messages, stateKey };
   });
 
   // Both parties confirm the trade completed. Platform staff cannot complete on their behalf.

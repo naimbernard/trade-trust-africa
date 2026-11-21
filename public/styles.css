@@ -258,3 +258,7 @@ html{-webkit-text-size-adjust:100%;scroll-padding-top:72px}
 .switch-btn .lbl-short{display:none}
 @media (max-width:639px){.logo{font-size:.9rem}.top-in{gap:8px}}
 @media (max-width:399px){.switch-btn .lbl-long{display:none}.switch-btn .lbl-short{display:inline}.logo{font-size:.82rem;letter-spacing:.02em}}
+
+.bubble.pending{opacity:.6}
+.bubble.failed{background:var(--red-bg)!important}
+.linkbtn{background:none;border:0;padding:0;color:var(--red);font-weight:800;text-decoration:underline;cursor:pointer;font-size:inherit}

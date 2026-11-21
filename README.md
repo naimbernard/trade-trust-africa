@@ -36,7 +36,7 @@ Create a real platform admin: `TTA_ADMIN_PASSWORD='...' npm run create-admin -- 
 
 Other commands:
 
-* `npm test` runs 69 integration tests against the `tta_test` database (wiped each run).
+* `npm test` runs 71 integration tests against the `tta_test` database (wiped each run).
 * `npm run db:reset` drops and recreates the development schema (refuses in production).
 * `npm run dev` restarts on file changes.
 * `node scripts/e2e-smoke.cjs` drives a browser through every role on desktop and mobile (needs Playwright and a running, freshly seeded server; screenshots go to `e2e-shots/`).

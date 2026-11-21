@@ -160,7 +160,7 @@ window.addEventListener('tta:render', () => render());
 // Keep conversations live: refresh the chat and inbox every 8 seconds unless the user is typing or a dialog is open.
 setInterval(async () => {
   const h = location.hash;
-  const live = (h.startsWith('#/deal/') && (!h.includes('tab=') || h.includes('tab=chat'))) || h.startsWith('#/messages');
+  const live = h.startsWith('#/messages'); // the Trade Room chat has its own lighter live loop
   if (!live || document.hidden || document.querySelector('.modal')) return;
   const a = document.activeElement;
   if (a && ['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName) && a.value) return;

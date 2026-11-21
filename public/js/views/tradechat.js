@@ -5,6 +5,21 @@ import {
 } from '../core.js';
 
 let D = null; // current deal detail
+let lastMessageAt = null;
+const shownIds = new Set();
+
+function bubbleHtml(m, { pending = false, tempId = '' } = {}) {
+  const me = m.side === D.mySide;
+  return `<div class="bubble-row ${me ? 'me' : ''}" ${m.id ? `data-mid="${esc(m.id)}"` : ''} ${tempId ? `data-temp="${esc(tempId)}"` : ''}><div class="bubble ${pending ? 'pending' : ''}"><div class="micro muted">${esc(m.org_name)}</div>${esc(m.body)}<div class="micro muted bubble-meta">${pending ? 'Sending…' : `${dt(m.at)}${me ? ' · ✓ Sent' : ''}`}</div></div></div>`;
+}
+const nearBottom = (log) => log.scrollHeight - log.scrollTop - log.clientHeight < 120 || window.innerHeight + window.scrollY >= document.body.scrollHeight - 200;
+function appendBubble(html) {
+  const log = document.getElementById('chat-log'); if (!log) return null;
+  const stick = nearBottom(log);
+  log.insertAdjacentHTML('beforeend', html);
+  if (stick) { log.scrollTop = log.scrollHeight; log.lastElementChild?.scrollIntoView({ block: 'nearest' }); }
+  return log.lastElementChild;
+}
 let FIN = null; // finance requests for this deal
 
 const PRESETS = {
@@ -160,7 +175,7 @@ function stepDoneText(e) {
 
 function timeline() {
   const items = [
-    ...D.messages.map((m) => ({ at: m.at, html: `<div class="bubble-row ${m.side === D.mySide ? 'me' : ''}"><div class="bubble"><div class="micro muted">${esc(m.org_name)}</div>${esc(m.body)}<div class="micro muted">${dt(m.at)}</div></div></div>` })),
+    ...D.messages.map((m) => ({ at: m.at, html: bubbleHtml(m) })),
     ...D.offers.map((o) => ({ at: o.created_at, html: offerCard(o) })),
     ...[...D.events].reverse().filter((e) => EVENT_TEXT[e.type]).map((e) => ({ at: e.at, html: `<div class="sys">${esc(EVENT_TEXT[e.type](e))}<span>${dt(e.at)}</span></div>` })),
   ].sort((a, b) => new Date(a.at) - new Date(b.at));
@@ -169,6 +184,9 @@ function timeline() {
 
 export async function chatTab(d) {
   D = d;
+  shownIds.clear(); d.messages.forEach((m) => shownIds.add(m.id));
+  lastMessageAt = d.messages.reduce((t, m) => (m.at > (t || '') ? m.at : t), null);
+  startLive();
   FIN = d.readOnly ? null : await api(`/api/deals/${d.deal.id}/finance`).catch(() => null);
   const can = !d.readOnly && canAct() && !['cancelled', 'completed'].includes(d.deal.status);
   const presets = PRESETS[d.mySide] || [];
@@ -193,8 +211,54 @@ async function historyAside(d) {
 export function scrollChat() { const el = document.getElementById('chat-log'); if (el) el.scrollTop = el.scrollHeight; }
 
 // ---------- actions ----------
-actions.preset = async (el) => { await post(`/api/deals/${D.deal.id}/messages`, { text: el.dataset.text }); rerender(); };
-forms['chat-send'] = async (data) => { await post(`/api/deals/${D.deal.id}/messages`, { text: data.text }); rerender(); };
+// ---------- instant sending ----------
+const inFlight = new Map(); // text -> time, blocks double taps
+function sendMessage(text) {
+  text = String(text || '').trim();
+  if (!text || !D) return;
+  const now = Date.now();
+  if (inFlight.has(text) && now - inFlight.get(text) < 4000) return;
+  inFlight.set(text, now);
+  const tempId = `t${now}`;
+  const me = D.mySide === 'buyer' ? D.buyer : D.seller;
+  const row = appendBubble(bubbleHtml({ body: text, side: D.mySide, org_name: me.name }, { pending: true, tempId }));
+  const dealId = D.deal.id;
+  post(`/api/deals/${dealId}/messages`, { text }).then((r) => {
+    shownIds.add(r.id);
+    if (row) { row.dataset.mid = r.id; row.querySelector('.bubble').classList.remove('pending'); row.querySelector('.bubble-meta').textContent = `${dt(r.at)} · ✓ Sent`; }
+    if (!lastMessageAt || r.at > lastMessageAt) lastMessageAt = r.at;
+  }).catch((err) => {
+    if (row) { row.querySelector('.bubble').classList.add('failed'); row.querySelector('.bubble-meta').innerHTML = `Not sent. <button class="linkbtn" data-action="retry-send" data-text="${esc(text)}">Tap to retry</button>`; }
+    toast(err.message, true);
+  }).finally(() => setTimeout(() => inFlight.delete(text), 4000));
+}
+actions.preset = (el) => { sendMessage(el.dataset.text); };
+actions['retry-send'] = (el) => { el.closest('.bubble-row')?.remove(); inFlight.delete(el.dataset.text); sendMessage(el.dataset.text); };
+forms['chat-send'] = (data, f) => { f.reset(); f.elements.text.focus(); sendMessage(data.text); };
+
+// ---------- live updates: small poll, full reload only when something other than chat changed ----------
+let liveTimer = null;
+function startLive() {
+  if (liveTimer) return;
+  liveTimer = setInterval(async () => {
+    if (!D || document.hidden) return;
+    const h = location.hash;
+    if (!h.startsWith(`#/deal/${D.deal.id}`) || (h.includes('tab=') && !h.includes('tab=chat'))) return;
+    let r;
+    try { r = await api(`/api/deals/${D.deal.id}/live?after=${encodeURIComponent(lastMessageAt || '')}`); } catch { return; }
+    for (const m of r.messages) {
+      if (m.at > (lastMessageAt || '')) lastMessageAt = m.at;
+      if (shownIds.has(m.id) || document.querySelector(`[data-mid="${m.id}"]`)) continue;
+      shownIds.add(m.id);
+      appendBubble(bubbleHtml(m));
+    }
+    if (r.stateKey !== D.stateKey) {
+      const a = document.activeElement;
+      const typing = a && ['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName) && a.value;
+      if (!document.querySelector('.modal') && !typing) { D.stateKey = r.stateKey; rerender(); }
+    }
+  }, 4000);
+}
 
 actions['offer-new'] = (el) => {
   const last = [...D.offers].reverse()[0]?.terms;
