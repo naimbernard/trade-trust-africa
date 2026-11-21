@@ -14,7 +14,7 @@ after(async () => { await env.close(); });
 
 const login = async (email) => { const c = env.client(); await c.login(email, PASSWORD); return c; };
 
-test('showcase builds four Trade Rooms at different stages', async () => {
+test('showcase builds five Trade Rooms at different stages', async () => {
   const coastline = await login('wholesalefish@pitch.tta');
   const deals = await coastline.getOk('/api/deals');
   const crab = deals.find((d) => d.title === 'Surimi crab sticks for Accra wholesale');
@@ -31,6 +31,11 @@ test('showcase builds four Trade Rooms at different stages', async () => {
   const gadre = await login('gadre@pitch.tta');
   const prawns = (await gadre.getOk('/api/inbox')).find((d) => d.title.startsWith('Frozen prawns'));
   assert.equal(prawns.unread, 2);
+  const rebar = (await bernard.getOk('/api/deals')).find((d) => d.title.startsWith('Rebar'));
+  assert.equal(rebar.current_step, 'Trade finance decision');
+  const bank = await login('bank1@pitch.tta');
+  const pending = (await bank.getOk('/api/finance/requests')).filter((r) => !r.my_decision);
+  assert.equal(pending.length, 1); assert.equal(pending[0].amount, 150000);
 });
 
 test('every pitch listing has quantity and price, and every company has documents and checks', async () => {

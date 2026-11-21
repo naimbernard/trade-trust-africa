@@ -35,14 +35,18 @@ if (email && password) {
 }
 // Pitch scenario (Bernard Builders, Goevia Builders, Gadre Marine). Accounts use PITCH_PASSWORD,
 // falling back to the admin bootstrap password. Disable with SEED_PITCH=false.
-const pitchPassword = process.env.PITCH_PASSWORD || password;
-if (process.env.SEED_PITCH !== 'false' && pitchPassword) {
-  const n = await seedPitch(pool, pitchPassword);
+const pitchPassword = process.env.PITCH_PASSWORD || password || 'DemoPitch2026';
+if (process.env.SEED_PITCH !== 'false') {
+  let n = 0;
+  try { n = await seedPitch(pool, pitchPassword); } catch (err) { console.warn(`Pitch profiles skipped: ${err.message}`); }
   console.log(n ? `${n} pitch profile(s) created` : 'Pitch profiles already present');
   // Demo showcase (example Trade Rooms, documents, indicative prices). Only while the site is a demo.
   if (process.env.DEMO_MODE !== 'false') {
     const config = { ...loadConfig({ ...process.env, NODE_ENV: 'production', DATABASE_URL: url }), demoMode: true };
-    await seedShowcase({ pool, config, password: pitchPassword });
+    try { await seedShowcase({ pool, config, password: pitchPassword }); } catch (err) {
+      // Demo data must never block a deploy: log it and carry on.
+      console.warn(`Showcase skipped: ${err.message}`);
+    }
   }
 }
 await pool.end();

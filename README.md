@@ -36,7 +36,7 @@ Create a real platform admin: `TTA_ADMIN_PASSWORD='...' npm run create-admin -- 
 
 Other commands:
 
-* `npm test` runs 65 integration tests against the `tta_test` database (wiped each run).
+* `npm test` runs 69 integration tests against the `tta_test` database (wiped each run).
 * `npm run db:reset` drops and recreates the development schema (refuses in production).
 * `npm run dev` restarts on file changes.
 * `node scripts/e2e-smoke.cjs` drives a browser through every role on desktop and mobile (needs Playwright and a running, freshly seeded server; screenshots go to `e2e-shots/`).
@@ -74,6 +74,10 @@ The live Vercel site runs as a private presentation demo by Mavorra Creative:
 * Every company shows a 100 Trade-Ready score with all checks passed, labelled "Verified (demo data)". A banner on every page says all data is for demonstration only.
 * Pitch profiles are loaded on each deploy (`scripts/seed-pitch.mjs`): Bernard Builders & Real Estate, Goevia Builders, Gadre Marine and the fictional Coastline Wholesale Fish (DEMO), plus two fictional partner banks that reply instantly to finance requests. Logins: `bernard@pitch.tta`, `goevia@pitch.tta`, `gadre@pitch.tta`, `wholesalefish@pitch.tta`, `bank1@pitch.tta` and `bank2@pitch.tta`, using `PITCH_PASSWORD` or else the admin bootstrap password.
 * Businesses in AfCFTA member states get an AfCFTA badge, and a note that trade with other African member states may qualify for reduced or zero tariffs, subject to rules of origin.
+
+**Switch account** (demo mode only): a gold button in the header lists every demo company (buyers, sellers, logistics, partner banks). One tap signs in as that company with no password, so one person can present every side. It is disabled when `DEMO_MODE=false` and only works for `@pitch.tta` accounts. Demo account passwords are re-synced on every deploy, and demo data can never block a deploy.
+
+**Trade finance (one way):** the buyer requests an amount from partner banks and waits. Each bank sees only the consented details and the amount, and taps Approve (amount up to the request, plus terms) or Decline. The buyer then accepts one approved offer.
 
 The build also loads a one-time **showcase** (`scripts/seed-showcase.mjs`, demo mode only): fictional suppliers Tema Cement & Concrete, Konkan Steel & TMT and Atlantic Cold Chain Logistics (`cement@`, `steel@`, `freight@pitch.tta`), indicative prices on every listing, a demo certificate and checks for every company, and four Trade Rooms: a completed crab sticks trade (finance, freight quote, tracking, payment on time), a cement trade shipped and awaiting Bernard's delivery confirmation, a TMT offer awaiting Goevia, and a new prawns chat for Gadre.
 

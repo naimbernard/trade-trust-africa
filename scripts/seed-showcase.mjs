@@ -1,7 +1,7 @@
 // DEMO MODE ONLY. Fills every field so the platform can be shown A to Z:
 //  * complete listing details (quantities, indicative demo prices, lead times)
 //  * a demo incorporation certificate and passed demo checks for every pitch company
-//  * four Trade Rooms at different stages, built through the real API so every rule is enforced
+//  * five Trade Rooms at different stages, built through the real API so every rule is enforced
 // Runs once (marked in the audit log). Never run with DEMO_MODE=false: prices, documents and checks are illustrative.
 import PDFDocument from 'pdfkit';
 import { loadConfig } from '../src/config.mjs';
@@ -89,7 +89,7 @@ export async function seedShowcase({ pool, config, password, log = console.log }
     const coastline = await as('wholesalefish@pitch.tta'); const gadre = await as('gadre@pitch.tta');
     const bernard = await as('bernard@pitch.tta'); const cement = await as('cement@pitch.tta');
     const goevia = await as('goevia@pitch.tta'); const steel = await as('steel@pitch.tta');
-    const freight = await as('freight@pitch.tta');
+    const freight = await as('freight@pitch.tta'); const bank = await as('bank1@pitch.tta');
 
     // A. Completed trade: Coastline buys crab sticks from Gadre, with bank finance, a freight quote and tracking.
     const crab = await listing(coastline, 'Surimi crab sticks (frozen)');
@@ -100,7 +100,8 @@ export async function seedShowcase({ pool, config, password, log = console.log }
     const o1 = await coastline.ok(`/api/deals/${A.id}/offers`, { terms: { quantity: 2, unit: 'reefer containers', total_value: 88000, currency: 'USD', payment_method: 'lc_sight', payment_due_days: 30, incoterm: 'CIF', named_place: 'Tema port, Ghana' }, note: 'Can you ship in March?' });
     const o2 = await gadre.ok(`/api/deals/${A.id}/offers/${o1.id}/respond`, { decision: 'counter', terms: { quantity: 2, unit: 'reefer containers', total_value: 94000, currency: 'USD', payment_method: 'lc_sight', payment_due_days: 30, incoterm: 'CIF', named_place: 'Tema port, Ghana' }, note: 'Best price for 2 containers, cold chain to Tema included. March shipment confirmed.' });
     await coastline.ok(`/api/deals/${A.id}/offers/${o2.id}/respond`, { decision: 'accept' });
-    const fin = await coastline.ok(`/api/deals/${A.id}/steps/finance`, { use_finance: true, product: 'lc_advisory', consent: true });
+    const fin = await coastline.ok(`/api/deals/${A.id}/steps/finance`, { use_finance: true, product: 'lc_advisory', amount: 94000, currency: 'USD', consent: true });
+    await bank.ok(`/api/finance/requests/${fin.request_id}/respond`, { decision: 'approved', approved_amount: 94000, message: 'Approved: LC issuance for USD 94,000 at 1.25% commission, subject to KYC (demo).' });
     const fr = (await coastline.getOk(`/api/deals/${A.id}/finance`)).requests.find((r) => r.id === fin.request_id);
     await coastline.ok(`/api/finance/requests/${fr.id}/select`, { provider_org_id: fr.responses[0].provider_org_id });
     const lr = await gadre.ok(`/api/deals/${A.id}/logistics-requests`, { origin: 'Mumbai (JNPT), India', destination: 'Tema, Ghana', cargo_description: 'Frozen surimi crab sticks', quantity: '2 x 40ft reefer', incoterm: 'CIF', mode: 'sea_reefer', temperature_control: 'minus 18C', ready_date: plus(5) });
@@ -145,12 +146,22 @@ export async function seedShowcase({ pool, config, password, log = console.log }
     await say(coastline, D.id, 'Hello, is this still available?');
     await say(coastline, D.id, 'We need 1 container of 26/30 vannamei every month.');
 
+    // E. Finance waiting for the bank: Bernard buys rebar from Konkan Steel and asks partner banks for USD 150,000.
+    const rebar = await listing(steel, 'Reinforcement steel (rebar) for construction in Ghana');
+    const E = await steel.ok('/api/deals', { listing_id: rebar.id, title: 'Rebar for East Legon development' });
+    await say(steel, E.id, 'We can ship Fe 500D rebar from Mormugao to Tema in 35 days.');
+    await say(bernard, E.id, 'Good. Please quote 300 tonnes CIF Tema.');
+    const oe = await steel.ok(`/api/deals/${E.id}/offers`, { terms: { quantity: 300, unit: 'tonnes', total_value: 201000, currency: 'USD', payment_method: 'lc_usance', payment_due_days: 60, incoterm: 'CIF', named_place: 'Tema port, Ghana' }, note: '60 day usance LC acceptable.' });
+    await bernard.ok(`/api/deals/${E.id}/offers/${oe.id}/respond`, { decision: 'accept' });
+    await bernard.ok(`/api/deals/${E.id}/steps/finance`, { use_finance: true, product: 'lc_advisory', amount: 150000, currency: 'USD', consent: true });
+    await say(bernard, E.id, 'We have asked our partner banks for USD 150,000 of LC finance.');
+
     // Enquiries
     await bernard.ok(`/api/listings/${(await listing(bernard, 'Ready mix concrete C30/37 delivered to site')).id}/enquiries`, { message: 'Can you supply 400 cubic metres a week for 3 months in East Legon?' });
     await goevia.ok(`/api/listings/${(await listing(goevia, 'TMT steel bars Fe 500D, 8mm to 32mm')).id}/enquiries`, { message: 'Do you hold stock of 25mm bars?' });
 
     await pool.query(`insert into audit_log (action, entity_type, data) values ('showcase_seeded','system','{}')`);
-    log('Showcase seeded: 1 completed trade, 1 shipped, 1 open offer, 1 new chat, 2 enquiries');
+    log('Showcase seeded: 1 completed trade, 1 shipped, 1 open offer, 1 finance request awaiting a bank, 1 new chat, 2 enquiries');
     return true;
   } finally {
     await new Promise((r) => app.close(r));

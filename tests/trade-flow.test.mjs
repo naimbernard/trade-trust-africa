@@ -60,11 +60,19 @@ test('full trade procedure: finance via partner bank, documents, shipping, deliv
   // only the buyer acts on the finance step
   assert.equal((await seller.post(`/api/deals/${deal.id}/steps/finance`, { use_finance: false })).status, 403);
   assert.equal((await buyer.post(`/api/deals/${deal.id}/steps/shipment`, {})).status, 409, 'steps run in order');
-  const f = await buyer.ok(`/api/deals/${deal.id}/steps/finance`, { use_finance: true, product: 'lc_advisory', consent: true });
+  assert.equal((await buyer.post(`/api/deals/${deal.id}/steps/finance`, { use_finance: true, product: 'lc_advisory', consent: true })).status, 400, 'amount required');
+  const f = await buyer.ok(`/api/deals/${deal.id}/steps/finance`, { use_finance: true, product: 'lc_advisory', amount: 80000, currency: 'USD', consent: true });
   assert.equal(f.done, false);
   const seen = (await bank.getOk('/api/finance/requests')).find((r) => r.id === f.request_id);
-  assert.ok(seen && seen.shared_fields.value === 'USD 96000');
-  await bank.ok(`/api/finance/requests/${f.request_id}/respond`, { decision: 'interested', message: 'LC confirmation available' });
+  assert.ok(seen && seen.shared_fields.value === 'USD 96000'); assert.equal(seen.amount, 80000); assert.equal(seen.shared_fields.amount_requested, 'USD 80000');
+  // nothing to accept until a bank approves
+  assert.equal((await buyer.post(`/api/finance/requests/${f.request_id}/select`, { provider_org_id: bank.orgId })).status, 409);
+  assert.equal((await bank.post(`/api/finance/requests/${f.request_id}/respond`, { decision: 'approved', approved_amount: 90000 })).status, 400, 'cannot approve more than requested');
+  const bank2 = await env.org('finance');
+  await bank2.ok(`/api/finance/requests/${f.request_id}/respond`, { decision: 'declined', message: 'Outside appetite' });
+  assert.equal((await buyer.post(`/api/finance/requests/${f.request_id}/select`, { provider_org_id: bank2.orgId })).status, 409, 'cannot accept a decline');
+  await bank.ok(`/api/finance/requests/${f.request_id}/respond`, { decision: 'approved', approved_amount: 80000, message: 'LC at 1.25%' });
+  assert.equal((await seller.post(`/api/finance/requests/${f.request_id}/select`, { provider_org_id: bank.orgId })).status, 403, 'only the buyer accepts finance');
   await buyer.ok(`/api/finance/requests/${f.request_id}/select`, { provider_org_id: bank.orgId });
   let d = await detail(buyer, deal.id);
   assert.equal(d.milestones.find((m) => m.key === 'finance').status, 'done');

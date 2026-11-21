@@ -6,7 +6,7 @@ import { CURRENCIES, INCOTERMS, PAYMENT_METHODS, FINANCE_PRODUCTS, FINANCE_SHARE
 import { validateStageFields } from '../domain/stages.mjs';
 import { loadDealFor, requireActingSide } from '../domain/deal-access.mjs';
 import { event, touch, snapshotAgreement, finaliseCompletion } from './deals.mjs';
-import { buildSharedFields, demoBankResponses, CONSENT_TEXT } from './finance.mjs';
+import { buildSharedFields, CONSENT_TEXT } from './finance.mjs';
 
 const regionName = new Intl.DisplayNames(['en'], { type: 'region' });
 const INSURED_BY_SELLER = ['CIF', 'CIP', 'DAP', 'DPU', 'DDP'];
@@ -143,18 +143,19 @@ export default function tradeFlowRoutes(router, { config }) {
           if (b.use_finance === true) {
             if (step.data.request_id) fail(409, 'A finance request is already with partner banks. Choose a bank offer, or continue without finance.');
             const product = v.oneOf(b.product, 'Finance product', FINANCE_PRODUCTS);
+            const amount = v.num(b.amount, 'Amount requested', { min: 1 });
+            const currency = v.oneOf(b.currency || 'USD', 'Currency', CURRENCIES);
             if (b.consent !== true) fail(400, 'Please confirm consent to share the selected details with partner banks');
             const keys = [...new Set(Array.isArray(b.share) && b.share.length ? b.share : ['deal_ref', 'product', 'value', 'payment_method', 'incoterm'])];
             keys.forEach((k) => v.oneOf(k, 'Shared field', Object.keys(FINANCE_SHAREABLE)));
-            const shared = await buildSharedFields(c, config, deal, keys);
-            const fr = await one(c, `insert into finance_requests (deal_id, requested_by_org, requested_by_user, product, shared_fields, consent_text, consented_at)
-                                     values ($1,$2,$3,$4,$5,$6,now()) returning id`, [deal.id, ctx.org.id, ctx.user.id, product, shared, CONSENT_TEXT]);
-            await c.query(`update deal_milestones set data = data || $3 where deal_id=$1 and key=$2`, [deal.id, 'finance', { use_finance: true, request_id: fr.id, product }]);
-            await event(c, deal.id, 'finance', 'finance_introduction_requested', side, ctx.user.id, null, { request_id: fr.id, product, shared_keys: keys });
-            const banks = await demoBankResponses(c, config, fr.id, deal.id, product);
-            await ctx.audit('finance_request_created', 'finance_request', fr.id, { shared_keys: keys, via: 'trade_flow' }, c);
+            const shared = { amount_requested: `${currency} ${amount}`, ...(await buildSharedFields(c, config, deal, keys)) };
+            const fr = await one(c, `insert into finance_requests (deal_id, requested_by_org, requested_by_user, product, shared_fields, consent_text, consented_at, amount, currency)
+                                     values ($1,$2,$3,$4,$5,$6,now(),$7,$8) returning id`, [deal.id, ctx.org.id, ctx.user.id, product, shared, CONSENT_TEXT, amount, currency]);
+            await c.query(`update deal_milestones set data = data || $3 where deal_id=$1 and key=$2`, [deal.id, 'finance', { use_finance: true, request_id: fr.id, product, amount, currency }]);
+            await event(c, deal.id, 'finance', 'finance_introduction_requested', side, ctx.user.id, null, { request_id: fr.id, product, amount, currency, shared_keys: keys });
+            await ctx.audit('finance_request_created', 'finance_request', fr.id, { shared_keys: keys, amount, currency, via: 'trade_flow' }, c);
             await touch(c, deal.id);
-            return { done: false, request_id: fr.id, banks_responded: banks };
+            return { done: false, request_id: fr.id };
           }
           if (b.use_finance !== false) fail(400, 'Choose whether to use trade finance');
           if (step.data.request_id) await c.query(`update finance_requests set status='withdrawn' where id=$1 and status='open'`, [step.data.request_id]);
@@ -216,11 +217,11 @@ export default function tradeFlowRoutes(router, { config }) {
       const { deal, side } = await lockFlow(ctx, c, fr.deal_id);
       if (side !== 'buyer') fail(403, 'The buyer chooses the finance partner');
       if (fr.status !== 'open') fail(409, 'This request is no longer open');
-      const resp = await one(c, `select r.decision, o.name from finance_responses r join organisations o on o.id=r.provider_org_id where r.request_id=$1 and r.provider_org_id=$2`, [fr.id, providerId]);
-      if (!resp || resp.decision === 'declined') fail(409, 'Choose a bank that has offered to help');
+      const resp = await one(c, `select r.decision, r.approved_amount, o.name from finance_responses r join organisations o on o.id=r.provider_org_id where r.request_id=$1 and r.provider_org_id=$2`, [fr.id, providerId]);
+      if (!resp || !['approved', 'interested'].includes(resp.decision)) fail(409, 'Choose a bank that has approved your request');
       await c.query(`update finance_requests set selected_provider_org=$2, status='closed' where id=$1`, [fr.id, providerId]);
       const step = await one(c, `select status from deal_milestones where deal_id=$1 and key='finance'`, [deal.id]);
-      if (step?.status === 'active') await completeStep(c, deal, 'finance', ctx.user.id, { use_finance: true, request_id: fr.id, bank: resp.name, bank_org_id: providerId });
+      if (step?.status === 'active') await completeStep(c, deal, 'finance', ctx.user.id, { use_finance: true, request_id: fr.id, bank: resp.name, bank_org_id: providerId, approved_amount: resp.approved_amount, currency: fr.currency });
       await event(c, deal.id, 'finance', 'finance_partner_selected', side, ctx.user.id, null, { bank: resp.name });
       await ctx.audit('finance_partner_selected', 'finance_request', fr.id, { provider_org_id: providerId }, c);
       await touch(c, deal.id);

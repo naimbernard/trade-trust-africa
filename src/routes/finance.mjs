@@ -35,24 +35,6 @@ export async function buildSharedFields(q, config, deal, keys) {
   return out;
 }
 
-/** Demo mode only: fictional partner banks answer instantly so a presenter can run the whole flow alone. */
-export async function demoBankResponses(c, config, requestId, dealId, product) {
-  if (!config.demoMode) return 0;
-  const banks = (await c.query(`select o.id, o.name, (select m.user_id from memberships m where m.org_id=o.id order by m.created_at limit 1) as user_id
-                                   from organisations o where o.org_type='finance' and o.is_demo and o.status='active' order by o.name`)).rows.filter((b) => b.user_id);
-  const label = product.replaceAll('_', ' ');
-  const offers = [
-    'Indicative offer: we can support this trade. Facility up to 80% of contract value, pricing from 7.5% p.a., subject to credit approval and KYC.',
-    'Indicative offer: support available with a confirmed Letter of Credit or invoice finance. Pricing from 6.9% p.a., subject to credit approval.',
-  ];
-  for (const [i, b] of banks.entries()) {
-    await c.query(`insert into finance_responses (request_id, provider_org_id, user_id, decision, message) values ($1,$2,$3,'interested',$4) on conflict do nothing`,
-      [requestId, b.id, b.user_id, `${offers[i % offers.length]} (${label}; simulated demo response)`]);
-    await c.query(`insert into deal_events (deal_id, type, payload) values ($1,'finance_response',$2)`, [dealId, { request_id: requestId, provider: b.name, decision: 'interested', demo: true }]);
-  }
-  return banks.length;
-}
-
 export default function financeRoutes(router, { config }) {
   router.add('POST', '/api/deals/:id/finance-requests', async (ctx) => {
     requireOrg(ctx, ACTING_ROLES);
@@ -69,15 +51,14 @@ export default function financeRoutes(router, { config }) {
                                      values ($1,$2,$3,$4,$5,$6,now()) returning id`, [access.deal.id, ctx.org.id, ctx.user.id, product, shared, CONSENT_TEXT]);
     await ctx.pool.query(`insert into deal_events (deal_id, type, side, user_id, payload) values ($1,'finance_introduction_requested',$2,$3,$4)`, [access.deal.id, side, ctx.user.id, { request_id: row.id, product, shared_keys: keys }]);
     await ctx.audit('finance_request_created', 'finance_request', row.id, { shared_keys: keys });
-    await demoBankResponses(ctx.pool, config, row.id, access.deal.id, product);
     ctx.status = 201;
     return row;
   });
 
   router.add('GET', '/api/deals/:id/finance', async (ctx) => {
     const access = await loadDealFor(ctx, ctx.pool, ctx.params.id, { allowStaff: true });
-    const requests = await many(ctx.pool, `select f.id, f.product, f.shared_fields, f.status, f.created_at, f.consented_at, o.name as requested_by from finance_requests f join organisations o on o.id=f.requested_by_org where f.deal_id=$1 order by f.created_at desc`, [access.deal.id]);
-    for (const r of requests) r.responses = await many(ctx.pool, `select r.decision, r.message, r.created_at, o.id as provider_org_id, o.name as provider_name, o.country as provider_country from finance_responses r join organisations o on o.id=r.provider_org_id where r.request_id=$1 order by r.created_at`, [r.id]);
+    const requests = await many(ctx.pool, `select f.id, f.product, f.shared_fields, f.amount, f.currency, f.selected_provider_org, f.status, f.created_at, f.consented_at, o.name as requested_by from finance_requests f join organisations o on o.id=f.requested_by_org where f.deal_id=$1 order by f.created_at desc`, [access.deal.id]);
+    for (const r of requests) r.responses = await many(ctx.pool, `select r.decision, r.message, r.approved_amount, r.created_at, o.id as provider_org_id, o.name as provider_name, o.country as provider_country from finance_responses r join organisations o on o.id=r.provider_org_id where r.request_id=$1 order by r.created_at`, [r.id]);
     return { requests, consentText: CONSENT_TEXT };
   });
 
@@ -103,7 +84,7 @@ export default function financeRoutes(router, { config }) {
     const org = requireOrg(ctx);
     if (org.type !== 'finance') fail(403, 'Only finance institutions can view introduction requests');
     return many(ctx.pool, `
-      select f.id, f.product, f.shared_fields, f.created_at, r.decision as my_decision, r.message as my_message
+      select f.id, f.product, f.shared_fields, f.amount, f.currency, f.created_at, r.decision as my_decision, r.message as my_message, r.approved_amount as my_approved_amount
         from finance_requests f left join finance_responses r on r.request_id=f.id and r.provider_org_id=$1
        where f.status='open' order by f.created_at desc limit 200`, [org.id]);
   });
@@ -112,14 +93,16 @@ export default function financeRoutes(router, { config }) {
     const org = requireOrg(ctx, ACTING_ROLES);
     if (org.type !== 'finance') fail(403, 'Only finance institutions can respond');
     if (!isUuid(ctx.params.id)) fail(404, 'Request not found');
-    const f = await one(ctx.pool, `select id, deal_id from finance_requests where id=$1 and status='open'`, [ctx.params.id]);
+    const f = await one(ctx.pool, `select id, deal_id, amount, currency from finance_requests where id=$1 and status='open'`, [ctx.params.id]);
     if (!f) fail(404, 'Request not found');
-    const decision = v.oneOf(ctx.body.decision, 'Decision', ['interested', 'more_information', 'declined']);
+    const decision = v.oneOf(ctx.body.decision, 'Decision', ['approved', 'interested', 'more_information', 'declined']);
     const message = v.str(ctx.body.message, 'Message', { optional: true, max: 1500, min: 0 });
-    await ctx.pool.query(`insert into finance_responses (request_id, provider_org_id, user_id, decision, message) values ($1,$2,$3,$4,$5)
-                          on conflict (request_id, provider_org_id) do update set decision=excluded.decision, message=excluded.message, user_id=excluded.user_id, created_at=now()`,
-    [f.id, org.id, ctx.user.id, decision, message]);
-    await ctx.pool.query(`insert into deal_events (deal_id, type, payload) values ($1,'finance_response',$2)`, [f.deal_id, { request_id: f.id, provider: org.name, decision }]);
+    const approvedAmount = decision === 'approved' ? v.num(ctx.body.approved_amount ?? f.amount, 'Approved amount', { min: 1 }) : null;
+    if (approvedAmount && f.amount && approvedAmount > Number(f.amount)) fail(400, 'Approved amount cannot exceed the amount requested');
+    await ctx.pool.query(`insert into finance_responses (request_id, provider_org_id, user_id, decision, message, approved_amount) values ($1,$2,$3,$4,$5,$6)
+                          on conflict (request_id, provider_org_id) do update set decision=excluded.decision, message=excluded.message, approved_amount=excluded.approved_amount, user_id=excluded.user_id, created_at=now()`,
+    [f.id, org.id, ctx.user.id, decision, message, approvedAmount]);
+    await ctx.pool.query(`insert into deal_events (deal_id, type, payload) values ($1,'finance_response',$2)`, [f.deal_id, { request_id: f.id, provider: org.name, decision, approved_amount: approvedAmount, currency: f.currency }]);
     await ctx.audit('finance_response', 'finance_request', f.id, { decision });
     return { ok: true };
   });

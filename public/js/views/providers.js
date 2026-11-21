@@ -34,13 +34,29 @@ export async function financeConsole() {
   if (!requireAuth()) return '';
   if (S.me.org?.type !== 'finance') return '<div class="notice warn">This workspace is for finance institutions.</div>';
   const rows = await api('/api/finance/requests');
-  return `<h1>Finance introductions</h1><p class="small muted">Requests show only the fields each trader consented to share. Contact details are exchanged after you express interest and the trader follows up.</p>
-  ${rows.length ? `<div class="grid g2">${rows.map((r) => `<div class="card stack"><div class="row between"><h3 data-style="margin:0">${esc(cap(r.product))}</h3>${r.my_decision ? pill(r.my_decision) : pill('new', 'New')}</div>
-    <dl class="kv">${Object.entries(r.shared_fields).map(([k, v]) => `<dt>${esc(S.meta.financeShareable[k] || k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
-    <div class="micro muted">Received ${dt(r.created_at)}</div>
-    ${canAct() ? `<form class="form" data-form="fin-respond" data-id="${r.id}"><div><label>Response</label><select name="decision">${options([['interested', 'Interested'], ['more_information', 'Need more information'], ['declined', 'Decline']], r.my_decision || 'interested')}</select></div><div><label>Message</label><textarea name="message" maxlength="1500">${esc(r.my_message || '')}</textarea></div><button class="btn sm">Send response</button></form>` : ''}</div>`).join('')}</div>` : empty('No open introduction requests')}`;
+  const pending = rows.filter((r) => !r.my_decision); const done = rows.filter((r) => r.my_decision);
+  const card = (r) => `<div class="card stack fin-req ${r.my_decision ? '' : 'new'}">
+    <div class="row between"><span class="micro muted">${esc({ lc_advisory: 'Letter of Credit', pre_shipment_finance: 'Pre-shipment finance', invoice_finance: 'Invoice finance', supply_chain_finance: 'Supply chain finance', trade_credit_insurance: 'Trade credit insurance' }[r.product] || cap(r.product))}</span>${r.my_decision ? pill(r.my_decision === 'approved' ? 'passed' : r.my_decision, r.my_decision === 'approved' ? `You approved ${money(r.my_approved_amount, r.currency || 'USD')}` : cap(r.my_decision)) : pill('new', 'Needs your decision')}</div>
+    <div class="fin-amount">${r.amount ? money(r.amount, r.currency || 'USD') : 'Amount not stated'}</div>
+    <dl class="kv">${Object.entries(r.shared_fields).filter(([k]) => k !== 'amount_requested').map(([k, v]) => `<dt>${esc(S.meta.financeShareable[k] || k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+    <div class="micro muted">Received ${dt(r.created_at)}. You see only the details the buyer agreed to share.</div>
+    ${canAct() && !r.my_decision ? `<div class="next-actions"><button class="btn green lg" data-action="fin-approve" data-id="${r.id}" data-amount="${esc(r.amount || '')}" data-cur="${esc(r.currency || 'USD')}">Approve</button><button class="btn ghost lg" data-action="fin-decline" data-id="${r.id}">Decline</button></div>` : ''}
+    ${r.my_message ? `<div class="small muted">Your reply: ${esc(r.my_message)}</div>` : ''}</div>`;
+  return `<div class="title-row"><div><h1>Finance requests</h1><p class="small muted">Buyers request an amount for a trade. Approve with your terms or decline. The buyer then accepts the offer they want.</p></div></div>
+  <h2>Needs your decision (${pending.length})</h2>${pending.length ? `<div class="grid g2">${pending.map(card).join('')}</div>` : empty('No new requests')}
+  ${done.length ? `<h2 data-style="margin-top:20px">Answered (${done.length})</h2><div class="grid g2">${done.map(card).join('')}</div>` : ''}`;
 }
-forms['fin-respond'] = async (d, f) => { await post(`/api/finance/requests/${f.dataset.id}/respond`, d); toast('Response sent'); rerender(); };
+const TERMS_PRESETS = ['LC issuance at 1.25% commission, subject to KYC.', 'LC confirmation at 1.5% p.a., subject to credit approval.', 'Invoice finance up to 80% at 7.5% p.a.', '90 day facility at 8% p.a., subject to documents.'];
+actions['fin-approve'] = (el) => openModal(`<h2>Approve finance</h2><form class="form" data-form="fin-approve" data-id="${esc(el.dataset.id)}">
+  <div class="two"><div><label>Approved amount (${esc(el.dataset.cur)})</label><input name="approved_amount" type="number" min="1" step="any" value="${esc(el.dataset.amount)}" max="${esc(el.dataset.amount)}" required></div><div></div></div>
+  <div><label>Your terms</label><div class="chips">${TERMS_PRESETS.map((t) => `<button type="button" class="chip" data-action="fill-terms" data-text="${esc(t)}">${esc(t)}</button>`).join('')}</div><textarea name="message" maxlength="1500" required placeholder="Pricing, conditions, validity"></textarea></div>
+  <div class="row"><button class="btn green lg">Send approval</button><button type="button" class="btn ghost" data-action="close">Cancel</button></div></form>`);
+actions['fill-terms'] = (el) => { const t = el.closest('form').elements.message; t.value = el.dataset.text; };
+forms['fin-approve'] = async (d, f) => { await post(`/api/finance/requests/${f.dataset.id}/respond`, { decision: 'approved', approved_amount: Number(d.approved_amount), message: d.message }); closeModal(); toast('Approval sent to the buyer'); rerender(); };
+actions['fin-decline'] = (el) => openModal(`<h2>Decline request</h2><form class="form" data-form="fin-decline" data-id="${esc(el.dataset.id)}">
+  <div><label>Reason</label><div class="chips">${['Outside our risk appetite.', 'Insufficient trading history.', 'Sector not supported.'].map((t) => `<button type="button" class="chip" data-action="fill-terms" data-text="${esc(t)}">${esc(t)}</button>`).join('')}</div><textarea name="message" maxlength="1500"></textarea></div>
+  <div class="row"><button class="btn red lg">Decline</button><button type="button" class="btn ghost" data-action="close">Cancel</button></div></form>`);
+forms['fin-decline'] = async (d, f) => { await post(`/api/finance/requests/${f.dataset.id}/respond`, { decision: 'declined', message: d.message }); closeModal(); toast('Decline sent'); rerender(); };
 
 export async function reviewQueue() {
   if (!requireAuth()) return '';

@@ -18,6 +18,7 @@ import billingRoutes from './routes/billing.mjs';
 import adminRoutes from './routes/admin.mjs';
 import publicRoutes from './routes/public.mjs';
 import tradeFlowRoutes from './routes/trade-flow.mjs';
+import demoRoutes from './routes/demo.mjs';
 
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
@@ -26,7 +27,7 @@ export function createHandler({ pool, config, logger = console }) {
   const router = new Router();
   const limiter = new RateLimiter();
   const deps = { pool, config };
-  for (const register of [publicRoutes, authRoutes, orgRoutes, listingRoutes, dealRoutes, documentRoutes, verificationRoutes, logisticsRoutes, financeRoutes, billingRoutes, adminRoutes, tradeFlowRoutes]) {
+  for (const register of [publicRoutes, authRoutes, orgRoutes, listingRoutes, dealRoutes, documentRoutes, verificationRoutes, logisticsRoutes, financeRoutes, billingRoutes, adminRoutes, tradeFlowRoutes, demoRoutes]) {
     register(router, deps);
   }
 

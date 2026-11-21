@@ -47,14 +47,16 @@ async function providerHome(kind) {
   const ships = kind === 'logistics' ? await api('/api/logistics/shipments') : [];
   return `<h1>Welcome, ${esc(S.me.user.fullName.split(' ')[0])}</h1><p class="small muted">${esc(S.me.org.name)} ${demo(S.me.org.isDemo)}</p>
   <div class="grid g3 stats" data-style="margin-bottom:16px">
-    <a class="card" href="#/${kind}" data-style="color:inherit;text-decoration:none"><div class="small muted">${kind === 'logistics' ? 'Open quote requests' : 'Introduction requests'}</div><div class="stat">${data.filter((x) => !x.my_quote_status && !x.my_decision).length}</div><div class="micro muted">awaiting your response</div></a>
+    <a class="card" href="#/${kind}" data-style="color:inherit;text-decoration:none"><div class="small muted">${kind === 'logistics' ? 'Open quote requests' : 'Introduction requests'}</div><div class="stat">${data.filter((x) => !x.my_quote_status && !x.my_decision).length}</div><div class="micro muted">${kind === 'finance' ? 'finance requests need your decision' : 'awaiting your quote'}</div></a>
     ${kind === 'logistics' ? `<a class="card" href="#/logistics" data-style="color:inherit;text-decoration:none"><div class="small muted">Active shipments</div><div class="stat">${ships.filter((s) => s.status !== 'delivered').length}</div></a>
       <div class="card"><div class="small muted">Quoted value</div><div class="stat">${money(data.filter((x) => x.my_price && x.my_currency === 'USD').reduce((n, x) => n + Number(x.my_price), 0))}</div><div class="micro muted">USD quotes outstanding</div></div>` : ''}
   </div><a class="btn gold" href="#/${kind}">Open ${kind === 'logistics' ? 'freight' : 'finance'} workspace</a>`;
 }
 
 async function staffHome() {
-  return `<h1>Staff workspace</h1><div class="grid g2">
+  return `<h1>Staff workspace</h1>
+  ${S.meta.flags.demoMode ? '<div class="next turn"><div class="next-tag">DEMO</div><h2>Show the platform as a company</h2><p>The admin account has no company, so it cannot chat or trade. Switch to a buyer, seller, logistics company or bank.</p><div class="next-actions"><button class="btn gold lg" data-action="switch-account">Switch account</button></div></div>' : ''}
+  <div class="grid g2">
     <a class="card" href="#/review" data-style="color:inherit;text-decoration:none"><h2>Verification queue</h2><p class="small muted">Review submitted evidence and record check outcomes.</p></a>
     ${S.me.user.platformRole === 'platform_admin' ? '<a class="card" href="#/admin" data-style="color:inherit;text-decoration:none"><h2>Administration</h2><p class="small muted">Analytics, organisations, users, disputes, fees and the audit log.</p></a>' : ''}</div>`;
 }

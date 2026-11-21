@@ -1,5 +1,5 @@
 // Trade Trust Africa single page app. Hash routing, server-rendered data via the authenticated JSON API.
-import { S, esc, loadMe, loadMeta, post, actions, forms, formData, toast, closeModal, openModal, go, icon, isStaff, demo, applyStyles } from './js/core.js';
+import { S, esc, api, loadMe, loadMeta, post, actions, forms, formData, toast, closeModal, openModal, go, icon, isStaff, demo, applyStyles } from './js/core.js';
 import { landing, login, register, invite, partners } from './js/views/public.js';
 import { market, listing, orgProfile, myListings, listingEditor, enquiries } from './js/views/market.js';
 import { dealsList, deal } from './js/views/deals.js';
@@ -61,8 +61,9 @@ function shell(content) {
       <a class="logo" href="#/">TRADE <b>TRUST</b> AFRICA</a>
       <nav aria-label="Main">${items.map(([h, t]) => `<a href="${h}" class="${active(h) ? 'on' : ''}">${t}</a>`).join('')}</nav>
       <span class="spacer"></span>
+      ${demoMode ? '<button class="switch-btn" data-action="switch-account" aria-label="Switch demo account">⇄ <span class="lbl-long">Switch account</span><span class="lbl-short">Switch</span></button>' : ''}
       ${S.me.user ? `<div class="who">${orgSwitch}<span class="chip-org">${esc(S.me.org?.name || S.me.user.fullName)} ${demo(S.me.org?.isDemo || S.me.user.isDemo)}</span><button class="btn sm ghost desk-only" data-action="logout">Sign out</button></div>`
-    : '<div class="who"><a class="btn sm ghost hide-sm" href="#/login" data-style="background:transparent;color:#fff;border-color:#ffffff55">Sign in</a><a class="btn sm gold" href="#/register">Register</a></div>'}
+    : `<div class="who"><a class="btn sm ghost hide-sm" href="#/login" data-style="background:transparent;color:#fff;border-color:#ffffff55">Sign in</a><a class="btn sm gold ${demoMode ? 'desk-only' : ''}" href="#/register">Register</a></div>`}
     </div></header>
     <main class="page" id="main">
       ${demoMode
@@ -76,11 +77,11 @@ function shell(content) {
 }
 
 let renderSeq = 0;
-async function render() {
+async function render(navigated = false) {
   const seq = ++renderSeq;
   const raw = location.hash.slice(1) || '/';
   const path = raw.split('?')[0];
-  closeModal();
+  if (navigated) closeModal(); // background refreshes never close an open dialog
   let html;
   try {
     const found = ROUTES.find(([re]) => re.test(path));
@@ -111,7 +112,23 @@ actions.more = () => {
   openModal(`<div class="sheet-head"><div><div class="strong">${esc(S.me.org?.name || S.me.user.fullName)}</div><div class="micro muted">${esc(S.me.user.email)}</div></div><button class="btn sm ghost" data-action="close">Close</button></div>
     ${S.me.memberships?.length > 1 ? `<select id="org-switch" class="sheet-select" aria-label="Switch organisation">${S.me.memberships.map((m) => `<option value="${m.id}" ${m.id === S.me.org?.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>` : ''}
     <nav class="sheet-nav">${rest.map(([h, t, ic]) => `<a href="${h}">${icon(ic)}<span>${esc(t)}</span></a>`).join('')}</nav>
+    ${S.meta?.flags?.demoMode ? '<button class="btn gold block" data-action="switch-account" data-style="margin-bottom:8px">⇄ Switch demo account</button>' : ''}
     <button class="btn ghost block" data-action="logout">Sign out</button>`);
+};
+const ROLE_GROUP = { buyer: 'Buyers', importer: 'Buyers', manufacturer: 'Sellers', exporter: 'Sellers', distributor: 'Sellers', logistics: 'Logistics', finance: 'Partner banks' };
+actions['switch-account'] = async () => {
+  const rows = await api('/api/demo/accounts');
+  const groups = {};
+  for (const r of rows) (groups[ROLE_GROUP[r.org_type] || 'Other'] ||= []).push(r);
+  openModal(`<div class="sheet-head"><h2 data-style="margin:0">Switch demo account</h2><button class="btn sm ghost" data-action="close">Close</button></div>
+    <p class="small muted">Tap a company to see the platform as them. No password needed in the demo.</p>
+    ${Object.entries(groups).map(([g, list]) => `<div class="acct-group">${esc(g)}</div>${list.map((r) => `<button class="acct ${r.email === S.me.user?.email ? 'on' : ''}" data-action="switch-to" data-email="${esc(r.email)}"><div><strong>${esc(r.org_name)}</strong><span>${esc(r.email)}</span></div>${r.email === S.me.user?.email ? '<span>Current</span>' : '<span>›</span>'}</button>`).join('')}`).join('')}`);
+};
+actions['switch-to'] = async (el) => {
+  await post('/api/demo/switch', { email: el.dataset.email });
+  await loadMe(); closeModal(); toast(`Now viewing as ${S.me.org?.name || S.me.user.fullName}`);
+  const t = S.me.org?.type;
+  go(t === 'finance' ? '#/finance' : t === 'logistics' ? '#/logistics' : '#/messages');
 };
 actions.logout = async () => { await post('/api/auth/logout'); S.me = { user: null }; toast('Signed out'); go('#/'); };
 
@@ -137,7 +154,7 @@ document.addEventListener('change', async (e) => {
   try { await post('/api/auth/switch-org', { org_id: e.target.value }); await loadMe(); go('#/dashboard'); } catch (err) { toast(err.message, true); }
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
-window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { render(true); window.scrollTo(0, 0); });
 window.addEventListener('tta:render', () => render());
 
 // Keep conversations live: refresh the chat and inbox every 8 seconds unless the user is typing or a dialog is open.
@@ -148,6 +165,9 @@ setInterval(async () => {
   const a = document.activeElement;
   if (a && ['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName) && a.value) return;
   try { await loadMe(); } catch { return; }
+  if (document.querySelector('.modal')) return;
+  const b = document.activeElement;
+  if (b && ['INPUT', 'TEXTAREA', 'SELECT'].includes(b.tagName) && b.value) return;
   render();
 }, 8000);
 

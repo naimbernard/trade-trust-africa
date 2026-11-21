@@ -243,3 +243,18 @@ html{-webkit-text-size-adjust:100%;scroll-padding-top:72px}
 @media (max-width:360px){.sheet-nav{grid-template-columns:1fr}.bottom a{font-size:.62rem}}
 
 .chat,.chat>*,.chat-actions>*,.chips{min-width:0;max-width:100%}
+
+.fin-req.new{border:2px solid var(--gold)}
+.fin-amount{font-size:1.7rem;font-weight:800;color:var(--navy)}
+.bank-offer.declined{opacity:.7}
+.switch-btn{background:var(--gold);color:#1b1407;border:0;border-radius:30px;padding:7px 12px;font-weight:800;font-size:.8rem;min-height:36px;white-space:nowrap}
+.acct-group{margin:12px 0 6px;font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.acct{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;min-height:56px}
+.acct:hover{background:var(--soft)}.acct.on{border:2px solid var(--green)}
+.acct strong{display:block}.acct span{font-size:.78rem;color:var(--muted)}
+.modal>.card{min-width:0;max-width:100vw;overflow-x:hidden}
+.form>*,.form .two>*,.modal .chips{min-width:0;max-width:100%}
+
+.switch-btn .lbl-short{display:none}
+@media (max-width:639px){.logo{font-size:.9rem}.top-in{gap:8px}}
+@media (max-width:399px){.switch-btn .lbl-long{display:none}.switch-btn .lbl-short{display:inline}.logo{font-size:.82rem;letter-spacing:.02em}}

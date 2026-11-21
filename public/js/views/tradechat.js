@@ -22,6 +22,7 @@ export const FLOW = [
   { key: 'payment_received', label: 'Received', icon: '✅' },
 ];
 
+const FIN_LABEL = { lc_advisory: 'Letter of Credit', pre_shipment_finance: 'pre-shipment finance', invoice_finance: 'invoice finance', supply_chain_finance: 'supply chain finance', trade_credit_insurance: 'trade credit insurance' };
 const other = (side) => (side === 'buyer' ? 'seller' : 'buyer');
 const partyName = (side) => D[side]?.name || cap(side);
 const offerTotal = (t) => money(t.total_value, t.currency);
@@ -72,7 +73,7 @@ function nextStep() {
 function waitingText(step) {
   const who = partyName(step.owner_side);
   return {
-    finance: `${who} is deciding whether to use trade finance from a partner bank.`,
+    finance: step.data?.request_id ? `${who} has asked a partner bank for finance and is waiting for approval.` : `${who} is deciding whether to use trade finance from a partner bank.`,
     documents: `${who} is preparing the export documents (invoice, packing list, certificates).`,
     shipment: `${who} is arranging shipment of the goods.`,
     delivery: `${who} will confirm when the goods arrive.`,
@@ -88,13 +89,21 @@ function stepBanner(step) {
     case 'finance': {
       const req = FIN?.requests?.find((r) => r.id === step.data?.request_id);
       if (req) {
-        const offers = req.responses.filter((r) => r.decision !== 'declined');
-        return banner('turn', 'Your turn: choose a partner bank', offers.length ? 'Partner banks have replied. Choose one to continue, or continue without finance.' : 'Your request is with our partner banks. Their replies will appear here.',
-          `${offers.map((o) => `<div class="bank-offer"><div><strong>${esc(o.provider_name)}</strong><div class="small">${esc(o.message || cap(o.decision))}</div></div><button class="btn green" data-action="choose-bank" data-req="${req.id}" data-org="${o.provider_org_id}">Choose this bank</button></div>`).join('')}
+        const approved = req.responses.filter((r) => ['approved', 'interested'].includes(r.decision));
+        const declined = req.responses.filter((r) => r.decision === 'declined');
+        const asked = money(req.amount, req.currency || 'USD');
+        if (!approved.length) {
+          return banner('wait', 'Waiting for partner banks', `You asked partner banks for ${asked} of ${FIN_LABEL[req.product] || label(req.product)} finance. A bank must approve before you can continue.${declined.length ? ` ${declined.length} declined.` : ''}`,
+            `${declined.map((o) => `<div class="bank-offer declined"><div><strong>${esc(o.provider_name)}</strong><div class="small">Declined${o.message ? `: ${esc(o.message)}` : ''}</div></div></div>`).join('')}
+             <button class="btn ghost" data-action="no-finance">Cancel request and pay directly</button>`);
+        }
+        return banner('turn', 'Your turn: accept a finance offer', `A partner bank approved your request for ${asked}. Accept one offer to continue.`,
+          `${approved.map((o) => `<div class="bank-offer"><div><strong>${esc(o.provider_name)}</strong> ${pill('passed', o.decision === 'approved' ? `Approved ${o.approved_amount ? money(o.approved_amount, req.currency || 'USD') : ''}` : 'Interested')}<div class="small">${esc(o.message || '')}</div></div><button class="btn green" data-action="choose-bank" data-req="${req.id}" data-org="${o.provider_org_id}">Accept this finance</button></div>`).join('')}
+           ${declined.map((o) => `<div class="bank-offer declined"><div><strong>${esc(o.provider_name)}</strong><div class="small">Declined${o.message ? `: ${esc(o.message)}` : ''}</div></div></div>`).join('')}
            <button class="btn ghost" data-action="no-finance">Continue without finance</button>`);
       }
-      return banner('turn', 'Your turn: will you use trade finance?', 'A partner bank can finance or secure this trade (for example a Letter of Credit or invoice finance). Your request goes only to our partner banks, with the details you choose.',
-        `<button class="btn gold lg" data-action="want-finance">Yes, ask partner banks</button><button class="btn ghost lg" data-action="no-finance">No, I will pay directly</button>`);
+      return banner('turn', 'Your turn: will you use trade finance?', 'Ask our partner banks to finance this trade (for example a Letter of Credit or invoice finance). Enter the amount you need, send the request, then wait for a bank to approve.',
+        `<button class="btn gold lg" data-action="want-finance">Yes, request finance</button><button class="btn ghost lg" data-action="no-finance">No, I will pay directly</button>`);
     }
     case 'documents': return banner('turn', 'Your turn: prepare export documents', 'Upload the commercial invoice, packing list and certificates, then mark them ready for the buyer.',
       `<button class="btn ghost lg" data-action="upload-doc">Upload a document</button><button class="btn gold lg" data-action="step" data-key="documents">Documents are ready</button>`);
@@ -129,8 +138,8 @@ function offerCard(o) {
 const EVENT_TEXT = {
   terms_agreed: () => '🤝 Deal agreed. All terms accepted by both parties.',
   offer_declined: (e) => `${cap(e.side)} declined the offer${e.payload?.reason ? `: “${e.payload.reason}”` : ''}`,
-  finance_introduction_requested: () => '🏦 Buyer asked partner banks for trade finance',
-  finance_response: (e) => `🏦 ${e.payload?.provider} replied: ${label(e.payload?.decision)}${e.payload?.demo ? ' (demo)' : ''}`,
+  finance_introduction_requested: (e) => `🏦 Buyer requested ${e.payload?.amount ? money(e.payload.amount, e.payload.currency) : ''} trade finance from partner banks`,
+  finance_response: (e) => `🏦 ${e.payload?.provider} ${e.payload?.decision === 'approved' ? `approved ${e.payload.approved_amount ? money(e.payload.approved_amount, e.payload.currency || 'USD') : 'the request'}` : e.payload?.decision === 'declined' ? 'declined the request' : `replied: ${label(e.payload?.decision)}`}`,
   finance_partner_selected: (e) => `🏦 Buyer chose ${e.payload?.bank} as finance partner`,
   document_uploaded: (e) => `📄 Document uploaded: ${e.payload?.filename}`,
   step_done: (e) => stepDoneText(e),
@@ -225,17 +234,23 @@ forms['offer-decline'] = async (d, f) => { await post(`/api/deals/${D.deal.id}/o
 
 // finance
 actions['no-finance'] = async () => { await post(`/api/deals/${D.deal.id}/steps/finance`, { use_finance: false }); toast('No finance. Next: the seller prepares documents.'); rerender(); };
-actions['want-finance'] = () => openModal(`<h2>Ask partner banks for trade finance</h2>
+actions['want-finance'] = () => {
+  const price = D.stages.find((s) => s.key === 'pricing')?.proposal?.fields || {};
+  openModal(`<h2>Request trade finance</h2>
+  <p class="small muted">Your request goes to Trade Trust Africa partner banks. They approve or decline. You then accept the offer you want.</p>
   <form class="form" data-form="want-finance">
+    <div class="two"><div><label>Amount you need</label><input name="amount" type="number" min="1" step="any" value="${esc(price.total_value || '')}" required></div>
+      <div><label>Currency</label><select name="currency">${options(S.meta.currencies, price.currency || 'USD')}</select></div></div>
     <div><label>What do you need?</label><select name="product">${options([['lc_advisory', 'Letter of Credit (issue or confirm)'], ['pre_shipment_finance', 'Pre-shipment finance'], ['invoice_finance', 'Invoice finance'], ['supply_chain_finance', 'Supply chain finance'], ['trade_credit_insurance', 'Trade credit insurance']])}</select></div>
     <div><label>Details the banks will see</label>${Object.entries(S.meta.financeShareable).map(([k, v]) => `<label class="check"><input type="checkbox" name="share" data-multi="1" value="${k}" ${['deal_ref', 'product', 'value', 'payment_method', 'incoterm'].includes(k) ? 'checked' : ''}> ${esc(v)}</label>`).join('')}</div>
     <label class="check"><input type="checkbox" name="consent" required> <span class="small">I agree to share the details ticked above with Trade Trust Africa partner banks. Banks make their own credit decisions. Trade Trust Africa does not lend or hold funds.</span></label>
-    <div class="row"><button class="btn gold lg">Send to partner banks</button><button type="button" class="btn ghost" data-action="close">Cancel</button></div></form>`);
-forms['want-finance'] = async (d) => {
-  const r = await post(`/api/deals/${D.deal.id}/steps/finance`, { use_finance: true, product: d.product, share: d.share, consent: d.consent === true });
-  closeModal(); toast(r.banks_responded ? `${r.banks_responded} partner banks replied` : 'Sent to partner banks'); rerender();
+    <div class="row"><button class="btn gold lg">Send request</button><button type="button" class="btn ghost" data-action="close">Cancel</button></div></form>`);
 };
-actions['choose-bank'] = async (el) => { const r = await post(`/api/finance/requests/${el.dataset.req}/select`, { provider_org_id: el.dataset.org }); toast(`${r.bank} chosen. Next: the seller prepares documents.`); rerender(); };
+forms['want-finance'] = async (d) => {
+  await post(`/api/deals/${D.deal.id}/steps/finance`, { use_finance: true, product: d.product, amount: Number(d.amount), currency: d.currency, share: d.share, consent: d.consent === true });
+  closeModal(); toast('Request sent. Waiting for a partner bank to approve.'); rerender();
+};
+actions['choose-bank'] = async (el) => { const r = await post(`/api/finance/requests/${el.dataset.req}/select`, { provider_org_id: el.dataset.org }); toast(`Finance accepted from ${r.bank}. Next: the seller prepares documents.`); rerender(); };
 
 // documents and steps
 actions['upload-doc'] = () => openModal(`<h2>Upload export document</h2><form class="form" data-form="upload" data-deal="${D.deal.id}" data-close="1">

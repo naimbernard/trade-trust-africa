@@ -106,7 +106,8 @@ export async function seedPitch(pool, password, log = console.log) {
   let created = 0;
   for (const p of PITCH) {
     await tx(pool, async (c) => {
-      if ((await c.query('select 1 from users where email=$1', [p.email])).rowCount) return;
+      // Existing demo accounts: keep their password in sync with the deploy settings so logins always work.
+      if ((await c.query('update users set password_hash=$2, failed_logins=0, locked_until=null where email=$1', [p.email, hash])).rowCount) return;
       const u = (await c.query('insert into users (email, full_name, password_hash, is_demo) values ($1,$2,$3,$4) returning id', [p.email, p.fullName, hash, !!p.org.demo])).rows[0];
       const o = p.org;
       const org = (await c.query(`insert into organisations (name, org_type, country, city, website, description, sectors, pitch_preview, pitch_notice, is_demo, registration_number)
